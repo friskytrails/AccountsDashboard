@@ -1,6 +1,14 @@
-// Use the deployed backend in production; keep Vite's local proxy for development.
+// The Express routes are mounted below /api. Accept either a full backend URL
+// or a path, but always normalize the base so requests reach those routes.
 const configuredApi = import.meta.env.VITE_API_URL?.trim();
-const API = (configuredApi && (configuredApi.startsWith('http://') || configuredApi.startsWith('https://'))) ? configuredApi : (import.meta.env.PROD ? 'https://accounts-dashboard-ltwo.vercel.app' : '/api');
+const normalizeApiBase = (value) => {
+  const base = value.replace(/\/+$/, '');
+  return base.endsWith('/api') ? base : `${base}/api`;
+};
+
+const API = configuredApi
+  ? normalizeApiBase(configuredApi)
+  : normalizeApiBase(import.meta.env.PROD ? 'https://accounts-dashboard-ltwo.vercel.app' : '/api');
 
 export function getToken() {
   return localStorage.getItem('accounts_token') || '';
