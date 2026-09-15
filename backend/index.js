@@ -7,10 +7,15 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5174')
+const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
+const allowedOrigins = [
+  'http://localhost:5174',
+  'https://accounts-dashboard-one.vercel.app',
+  ...configuredOrigins
+];
 
 app.use(cors({
   origin: (origin, callback) => {
