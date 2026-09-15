@@ -7,7 +7,20 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
-app.use(cors({ origin: 'http://localhost:5174', credentials: true }));
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5174')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS origin not allowed'));
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Import and register all routes (to be added in later phases)
@@ -27,14 +40,31 @@ app.get('/api/health', (req, res) => {
 // Import booking database connection
 const { connectBookingDB } = require('./src/config/bookingDb');
 
-// Connect to MongoDB and start server
-mongoose.connect(process.env.MONGODB_URI)
+// Keep the database connection available for both local and Vercel execution.
+const databaseReady = mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
-    console.log('Connected to MongoDB');
+    console.log("Connected to MongoDB");
     await connectBookingDB();
-    app.listen(PORT, () => console.log(`Accounts backend running on http://localhost:${PORT}`));
-  })
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
   });
+
+// Vercel waits for the exported Express app; local requests wait for the DB too.
+app.use(async (req, res, next) => {
+  try {
+    await databaseReady;
+    next();
+  } catch (err) {
+    console.error("MongoDB connection error:", err);
+    res.status(503).json({ error: "Database unavailable" });
+  }
+});
+
+if (require.main === module) {
+  databaseReady
+    .then(() => app.listen(PORT, () => console.log("Accounts backend running on http://localhost:" + PORT)))
+    .catch(err => {
+      console.error("MongoDB connection error:", err);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

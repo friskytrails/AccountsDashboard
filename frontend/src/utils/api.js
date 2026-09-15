@@ -1,4 +1,5 @@
-const API = '/api';
+// Use the deployed backend in production; keep Vite's local proxy for development.
+const API = import.meta.env.VITE_API_URL || "/api";
 
 export function getToken() {
   return localStorage.getItem('accounts_token') || '';
