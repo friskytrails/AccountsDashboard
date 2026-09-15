@@ -1,5 +1,5 @@
 // Use the deployed backend in production; keep Vite's local proxy for development.
-const API = import.meta.env.VITE_API_URL || "/api";
+const API = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://accounts-dashboard-xjuh.vercel.app' : '/api')).replace(/\/$/, '');
 
 export function getToken() {
   return localStorage.getItem('accounts_token') || '';
