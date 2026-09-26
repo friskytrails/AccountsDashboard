@@ -1,9 +1,9 @@
-import { ArrowDownLeft, ArrowUpRight, Scale, Wallet, TrendingUp, TrendingDown, CheckCircle, ShieldCheck } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Scale, Wallet, TrendingUp, TrendingDown, CheckCircle, ShieldCheck, Zap } from 'lucide-react';
 import { Card, Box, Text, Heading, HStack, VStack, Badge, BadgeText, BadgeIcon } from '@/components/ui';
 
 function formatRupee(amount) {
   if (amount === undefined || amount === null) return '₹0';
-  return '₹ ' + Number(amount).toLocaleString('en-IN');
+  return '₹' + Number(amount).toLocaleString('en-IN');
 }
 
 export default function KpiCards({
@@ -19,6 +19,9 @@ export default function KpiCards({
   const lastDay = new Date(year || 2026, month || 9, 0).getDate();
   const monthName = new Date(year || 2026, (month || 9) - 1).toLocaleString('en-US', { month: 'short' });
 
+  // Calculate cash retention ratio
+  const retentionRatio = totalInflow > 0 ? Math.max(0, Math.min(100, Math.round((netCashFlow / totalInflow) * 100))) : 100;
+
   const cards = [
     {
       title: 'Total Cash Inflow',
@@ -26,11 +29,12 @@ export default function KpiCards({
       change: changes?.inflow,
       isBalance: false,
       icon: ArrowDownLeft,
-      accentBorder: 'hover:border-primary/50',
-      iconBg: 'bg-primary/20 text-primary border border-primary/30 shadow-md shadow-primary/10',
+      cardGradient: 'from-emerald-950/25 via-card to-card border-emerald-500/20 hover:border-emerald-500/40 shadow-emerald-950/20',
+      iconContainer: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-lg shadow-emerald-500/10',
+      accentGlow: 'bg-emerald-500',
       badgeVariant: 'success',
-      footerHighlight: '15 Verified Booking Payments',
-      subtitle: 'From live bookings & deposits'
+      tagText: 'Verified Inflow',
+      metricPill: `${formatRupee(totalInflow)} MTD`
     },
     {
       title: 'Total Cash Outflow',
@@ -38,11 +42,12 @@ export default function KpiCards({
       change: changes?.outflow,
       isBalance: false,
       icon: ArrowUpRight,
-      accentBorder: 'hover:border-destructive/50',
-      iconBg: 'bg-destructive/20 text-destructive border border-destructive/30 shadow-md shadow-destructive/10',
+      cardGradient: 'from-rose-950/20 via-card to-card border-rose-500/20 hover:border-rose-500/40 shadow-rose-950/20',
+      iconContainer: 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-lg shadow-rose-500/10',
+      accentGlow: 'bg-rose-500',
       badgeVariant: 'error',
-      footerHighlight: totalOutflow === 0 ? 'Zero Outflow Recorded' : 'Operational Expenditures',
-      subtitle: 'Vendor & tour operational expenses'
+      tagText: totalOutflow === 0 ? 'Zero Outflow Logged' : 'Supplier Disbursements',
+      metricPill: totalOutflow === 0 ? '0% Burn Rate' : `${formatRupee(totalOutflow)} paid`
     },
     {
       title: 'Net Cash Velocity',
@@ -50,33 +55,35 @@ export default function KpiCards({
       change: changes?.net,
       isBalance: false,
       icon: Scale,
-      accentBorder: 'hover:border-primary/50',
-      iconBg: 'bg-primary/15 text-primary border border-primary/25',
+      cardGradient: 'from-teal-950/25 via-card to-card border-teal-500/20 hover:border-teal-500/40 shadow-teal-950/20',
+      iconContainer: 'bg-teal-500/15 text-teal-400 border border-teal-500/30 shadow-lg shadow-teal-500/10',
+      accentGlow: 'bg-teal-500',
       badgeVariant: netCashFlow >= 0 ? 'success' : 'error',
-      footerHighlight: totalInflow > 0 ? `${((netCashFlow / totalInflow) * 100).toFixed(1)}% Cash Retention` : '100% Margin',
-      subtitle: 'Inflow minus total disbursements'
+      tagText: `${retentionRatio}% Retention`,
+      metricPill: 'Surplus Liquidity'
     },
     {
       title: 'Closing Treasury Balance',
       amount: closingBalance,
       isBalance: true,
       icon: Wallet,
-      accentBorder: 'hover:border-border',
-      iconBg: 'bg-muted text-foreground border border-border/80',
+      cardGradient: 'from-indigo-950/25 via-card to-card border-indigo-500/20 hover:border-indigo-500/40 shadow-indigo-950/20',
+      iconContainer: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 shadow-lg shadow-indigo-500/10',
+      accentGlow: 'bg-indigo-500',
       badgeVariant: 'muted',
-      footerHighlight: `Reconciled as of ${lastDay} ${monthName}`,
-      subtitle: 'Opening balance + net monthly flow'
+      tagText: `Audited as of ${lastDay} ${monthName}`,
+      metricPill: 'Reconciled'
     }
   ];
 
   if (loading) {
     return (
-      <Box className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <Box className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-7">
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="p-6 h-40 animate-pulse flex flex-col justify-between">
-            <Box className="h-4 bg-muted/60 rounded-lg w-1/2" />
-            <Box className="h-9 bg-muted/60 rounded-lg w-3/4" />
-            <Box className="h-3 bg-muted/60 rounded-lg w-1/3" />
+          <Card key={i} className="p-8 h-52 animate-pulse flex flex-col justify-between rounded-sm bg-card/60">
+            <Box className="h-5 bg-muted/60 rounded-none w-1/2" />
+            <Box className="h-12 bg-muted/60 rounded-none w-3/4" />
+            <Box className="h-4 bg-muted/60 rounded-none w-1/3" />
           </Card>
         ))}
       </Box>
@@ -84,7 +91,7 @@ export default function KpiCards({
   }
 
   return (
-    <Box className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+    <Box className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-7">
       {cards.map((c, i) => {
         const Icon = c.icon;
         const hasChange = c.change !== null && c.change !== undefined;
@@ -93,52 +100,51 @@ export default function KpiCards({
         return (
           <Card
             key={i}
-            className={`p-6 relative overflow-hidden transition-all duration-300 group hover:-translate-y-1 ${c.accentBorder}`}
+            className={`p-7 lg:p-8 rounded-sm relative overflow-hidden transition-all duration-300 group hover:shadow-2xl hover:border-border/90 glow-card bg-gradient-to-br ${c.cardGradient} flex flex-col justify-between min-h-[190px]`}
           >
-            {/* Ambient top light gradient */}
-            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-border to-transparent group-hover:via-primary transition-all duration-500" />
+            {/* Top ambient accent glow */}
+            <div className={`absolute -top-12 -right-12 w-32 h-32 ${c.accentGlow}/10 rounded-full blur-2xl pointer-events-none group-hover:scale-150 transition-transform duration-700`} />
 
-            <VStack space="sm" className="justify-between h-full">
-              {/* Card Header: Title & Icon Badge */}
-              <HStack space="md" className="justify-between items-start w-full">
-                <VStack space="2xs">
-                  <Text size="2xs" bold className="uppercase tracking-widest text-muted-foreground text-[11px]">
-                    {c.title}
-                  </Text>
-                  <Text size="2xs" className="text-muted-foreground/80 text-[10px]">
-                    {c.subtitle}
-                  </Text>
-                </VStack>
-                <Box className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${c.iconBg}`}>
-                  <Icon className="w-5 h-5 stroke-[2.2]" />
+            <VStack space="md" className="h-full justify-between">
+              {/* Header: Title & Spacious Icon Badge */}
+              <HStack space="md" className="justify-between items-center w-full">
+                <Text size="xs" bold className="uppercase tracking-wider text-muted-foreground font-semibold text-xs">
+                  {c.title}
+                </Text>
+                <Box className={`w-12 h-12 rounded-sm flex items-center justify-center shrink-0 transition-all duration-300 group-hover:scale-105 ${c.iconContainer}`}>
+                  <Icon className="w-6 h-6 stroke-[2.2]" />
                 </Box>
               </HStack>
 
-              {/* Main Amount Display */}
-              <Box className="my-1">
-                <Heading size="2xl" bold className="text-foreground tracking-tight font-mono text-3xl font-extrabold">
+              {/* Main Currency Amount */}
+              <Box className="my-2 overflow-hidden">
+                <Heading
+                  size="2xl"
+                  bold
+                  className="text-foreground tracking-tight font-sans text-2xl sm:text-3xl xl:text-[32px] font-extrabold whitespace-nowrap truncate"
+                >
                   {formatRupee(c.amount)}
                 </Heading>
               </Box>
 
-              {/* Card Footer: Change Badge or Highlight Note */}
-              <HStack space="sm" className="items-center justify-between pt-2 border-t border-border/40 text-xs">
+              {/* Card Footer: Badges & Contextual Stats */}
+              <HStack space="sm" className="items-center justify-between pt-3 border-t border-border/50 text-xs">
                 {!c.isBalance && hasChange ? (
-                  <Badge variant={isPositive ? 'success' : 'error'} size="sm" hasDot>
-                    <BadgeIcon as={isPositive ? TrendingUp : TrendingDown} className="w-3 h-3" />
-                    <BadgeText>
+                  <Badge variant={isPositive ? 'success' : 'error'} size="md" hasDot className="py-1 px-2.5 rounded-md">
+                    <BadgeIcon as={isPositive ? TrendingUp : TrendingDown} className="w-3.5 h-3.5" />
+                    <BadgeText className="text-xs font-bold">
                       {isPositive ? `+${c.change}%` : `${c.change}%`}
                     </BadgeText>
                   </Badge>
                 ) : (
-                  <Badge variant="muted" size="sm">
-                    <BadgeIcon as={CheckCircle} className="w-3 h-3 text-primary" />
-                    <BadgeText className="text-primary font-mono text-[10px]">VERIFIED</BadgeText>
+                  <Badge variant="muted" size="md" className="py-1 px-2.5 bg-muted/60 border border-border/70 rounded-md">
+                    <BadgeIcon as={CheckCircle} className="w-3.5 h-3.5 text-primary" />
+                    <BadgeText className="text-primary font-mono text-xs font-semibold">VERIFIED</BadgeText>
                   </Badge>
                 )}
 
-                <Text size="2xs" className="text-muted-foreground font-medium text-[11px]">
-                  {c.footerHighlight}
+                <Text size="xs" className="text-muted-foreground/90 font-medium text-xs">
+                  {c.tagText}
                 </Text>
               </HStack>
             </VStack>
@@ -148,3 +154,4 @@ export default function KpiCards({
     </Box>
   );
 }
+

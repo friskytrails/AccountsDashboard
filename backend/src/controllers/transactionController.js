@@ -1,6 +1,7 @@
 const Transaction = require('../models/Transaction');
+const { getBookingDB } = require('../config/bookingDb');
 
-const VALID_CATEGORIES = ['HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'SALARIES', 'MARKETING', 'OTHERS'];
+const VALID_CATEGORIES = ['SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'MARKETING', 'OTHERS'];
 const VALID_PAYMENT_MODES = ['UPI', 'BANK_TRANSFER', 'CASH', 'CARD', 'CHEQUE', 'OTHER'];
 
 // GET /api/transactions?month=9&year=2026&type=OUTFLOW&page=1&limit=20
@@ -27,6 +28,116 @@ async function getTransactions(req, res) {
   } catch (err) {
     console.error('getTransactions error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// GET /api/transactions/live-inflows?month=9&year=2026
+async function getLiveInflows(req, res) {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+
+    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const db = getBookingDB();
+    if (!db) return res.json({ inflows: [], totalAmount: 0, count: 0 });
+
+    const pipeline = [
+      { $unwind: '$payments' },
+      {
+        $addFields: {
+          'payments.paymentDateObj': {
+            $cond: {
+              if: { $eq: [{ $type: '$payments.paymentDate' }, 'date'] },
+              then: '$payments.paymentDate',
+              else: { $toDate: '$payments.paymentDate' }
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          'payments.paymentDateObj': { $gte: startDate, $lte: endDate },
+          $or: [
+            { 'payments.status': { $in: ['VERIFIED', 'PAID'] } },
+            { 'payments.verified': true }
+          ],
+          'payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] }
+        }
+      },
+      {
+        $project: {
+          _id: '$payments._id',
+          bookingId: '$bookingId',
+          travellerName: '$travellerName',
+          location: '$location',
+          packageName: '$packageName',
+          paymentId: '$payments.paymentId',
+          amountPaid: '$payments.amountPaid',
+          paymentMode: '$payments.paymentMode',
+          paymentDate: '$payments.paymentDateObj',
+          status: '$payments.status',
+          verified: '$payments.verified',
+          addedBy: '$payments.addedBy'
+        }
+      },
+      { $sort: { paymentDate: -1 } }
+    ];
+
+    const inflows = await db.collection('bookings').aggregate(pipeline).toArray();
+    const totalAmount = inflows.reduce((sum, item) => sum + Math.round(Number(item.amountPaid || 0)), 0);
+
+    res.json({ inflows, totalAmount, count: inflows.length });
+  } catch (err) {
+    console.error('getLiveInflows error:', err);
+    res.status(500).json({ error: 'Failed to fetch live booking inflows' });
+  }
+}
+
+// GET /api/transactions/live-outflows?month=9&year=2026
+async function getLiveOutflows(req, res) {
+  try {
+    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+
+    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const db = getBookingDB();
+    if (!db) return res.json({ outflows: [], totalAmount: 0, count: 0 });
+
+    const suppliers = await db.collection('suppliers').find({
+      createdAt: { $gte: startDate, $lte: endDate },
+      $or: [
+        { totalAmountPaid: { $gt: 0 } },
+        { total_amount_paid: { $gt: 0 } }
+      ]
+    }).sort({ createdAt: -1 }).toArray();
+
+    const outflows = suppliers.map(s => {
+      const amount = Math.round(Number(s.totalAmountPaid ?? s.total_amount_paid ?? 0));
+      return {
+        _id: s._id,
+        supplierId: s.supplierId,
+        supplierName: s.businessName || s.fullName || 'Supplier',
+        contactPerson: s.fullName,
+        contactNumber: s.contactNumber,
+        category: (s.supplierFor && s.supplierFor[0]) ? s.supplierFor[0].toUpperCase() : 'SUPPLIERS',
+        city: s.city,
+        state: s.state,
+        status: s.status,
+        date: s.createdAt,
+        amount
+      };
+    });
+
+    const totalAmount = outflows.reduce((sum, item) => sum + item.amount, 0);
+
+    res.json({ outflows, totalAmount, count: outflows.length });
+  } catch (err) {
+    console.error('getLiveOutflows error:', err);
+    res.status(500).json({ error: 'Failed to fetch live supplier outflows' });
   }
 }
 
@@ -103,4 +214,11 @@ async function editTransaction(req, res) {
   }
 }
 
-module.exports = { getTransactions, addTransaction, deleteTransaction, editTransaction };
+module.exports = {
+  getTransactions,
+  getLiveInflows,
+  getLiveOutflows,
+  addTransaction,
+  deleteTransaction,
+  editTransaction
+};

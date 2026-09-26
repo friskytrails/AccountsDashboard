@@ -1,31 +1,69 @@
-import { createContext, useContext, useState } from 'react';
-import { getToken } from '../utils/api';
+import { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => getToken() || 'mock-token');
-  const [user, setUser] = useState(() => {
-    const u = localStorage.getItem('accounts_user');
-    return u ? JSON.parse(u) : { id: 'admin-01', name: 'Accounts Admin', email: 'accounts@friskytrails.com', role: 'finance_manager' };
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('accounts_pass_auth') === 'true' && !!localStorage.getItem('accounts_token');
   });
+  const [user, setUser] = useState(null);
 
-  function login(tokenValue, userData) {
-    localStorage.setItem('accounts_token', tokenValue);
-    localStorage.setItem('accounts_user', JSON.stringify(userData));
-    setToken(tokenValue);
-    setUser(userData);
+  useEffect(() => {
+    const token = localStorage.getItem('accounts_token');
+    if (!token) {
+      setIsAuthenticated(false);
+      return;
+    }
+
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) {
+          logout();
+        } else {
+          return res.json().then(data => {
+            if (data?.user) setUser(data.user);
+          });
+        }
+      })
+      .catch(() => {
+        // If offline or network issue, maintain state if token exists
+      });
+  }, []);
+
+  async function login(password) {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data?.error || 'Authentication failed' };
+      }
+
+      localStorage.setItem('accounts_pass_auth', 'true');
+      localStorage.setItem('accounts_token', data.token);
+      setIsAuthenticated(true);
+      setUser(data.user);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: 'Could not connect to authentication server' };
+    }
   }
 
   function logout() {
+    localStorage.removeItem('accounts_pass_auth');
     localStorage.removeItem('accounts_token');
-    localStorage.removeItem('accounts_user');
-    setToken(null);
+    setIsAuthenticated(false);
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

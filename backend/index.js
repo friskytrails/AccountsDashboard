@@ -6,11 +6,66 @@ const mongoose = require('mongoose');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Middleware
-app.use(cors({ origin: 'http://localhost:5174', credentials: true }));
+// CORS setup supporting local development, configured FRONTEND_URL, and Vercel preview domains
+const allowedOrigins = [
+  'http://localhost:5174',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim().replace(/\/$/, '')) : [])
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, mobile, server-to-server)
+    if (!origin) return callback(null, true);
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.vercel.app') ||
+      process.env.NODE_ENV !== 'production'
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 
-// Import and register all routes (to be added in later phases)
+// Import booking database connection
+const { connectBookingDB } = require('./src/config/bookingDb');
+
+// Database connection helper supporting both standalone server and Vercel serverless
+let dbPromise = null;
+async function connectDB() {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      if (!process.env.MONGODB_URI) {
+        throw new Error('MONGODB_URI environment variable is missing');
+      }
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log('Connected to MongoDB');
+      await connectBookingDB();
+    })();
+  }
+  await dbPromise;
+}
+
+// Middleware to ensure DB is connected before processing API requests
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('Database connection error:', err);
+    res.status(500).json({ error: 'Database connection failed', message: err.message });
+  }
+});
+
+// Import and register all routes
 const authRoutes = require('./src/routes/authRoutes');
 const transactionRoutes = require('./src/routes/transactionRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
@@ -24,17 +79,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Accounts Dashboard API' });
 });
 
-// Import booking database connection
-const { connectBookingDB } = require('./src/config/bookingDb');
+// Start local server if run directly (node index.js)
+if (!process.env.VERCEL) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Accounts backend running on http://localhost:${PORT}`));
+    })
+    .catch(err => {
+      console.error('MongoDB startup error:', err);
+    });
+}
 
-// Connect to MongoDB and start server
-mongoose.connect(process.env.MONGODB_URI)
-  .then(async () => {
-    console.log('Connected to MongoDB');
-    await connectBookingDB();
-    app.listen(PORT, () => console.log(`Accounts backend running on http://localhost:${PORT}`));
-  })
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+module.exports = app;

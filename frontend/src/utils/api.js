@@ -1,4 +1,7 @@
-const API = '/api';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+const API = rawApiUrl
+  ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`)
+  : '/api';
 
 export function getToken() {
   return localStorage.getItem('accounts_token') || '';
@@ -30,6 +33,12 @@ export async function apiFetch(path, options = {}) {
     data = await res.json();
   } catch (err) {
     throw new Error(`Invalid JSON response: ${res.status}`);
+  }
+
+  if (res.status === 401) {
+    localStorage.removeItem('accounts_pass_auth');
+    localStorage.removeItem('accounts_token');
+    window.location.reload();
   }
 
   if (!res.ok) {
