@@ -7,11 +7,17 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // CORS setup supporting local development, configured FRONTEND_URL, and Vercel preview domains
+const configuredOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map(origin => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = [
   'http://localhost:5174',
   'http://localhost:5173',
   'http://localhost:3000',
-  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim().replace(/\/$/, '')) : [])
+  'https://accounts-dashboard-one.vercel.app',
+  ...configuredOrigins
 ];
 
 app.use(cors({
@@ -19,13 +25,14 @@ app.use(cors({
     // Allow requests with no origin (curl, mobile, server-to-server)
     if (!origin) return callback(null, true);
     if (
+      allowedOrigins.includes('*') ||
       allowedOrigins.includes(origin) ||
       origin.endsWith('.vercel.app') ||
       process.env.NODE_ENV !== 'production'
     ) {
       return callback(null, true);
     }
-    return callback(null, false);
+    return callback(new Error('CORS origin not allowed'));
   },
   credentials: true
 }));
@@ -54,6 +61,11 @@ async function connectDB() {
   await dbPromise;
 }
 
+// Keep connection starting immediately for serverless/cold starts
+const databaseReady = connectDB().catch(err => {
+  console.error('MongoDB initialization error:', err);
+});
+
 // Middleware to ensure DB is connected before processing API requests
 app.use(async (req, res, next) => {
   try {
@@ -61,7 +73,7 @@ app.use(async (req, res, next) => {
     next();
   } catch (err) {
     console.error('Database connection error:', err);
-    res.status(500).json({ error: 'Database connection failed', message: err.message });
+    res.status(503).json({ error: 'Database unavailable', message: err.message });
   }
 });
 
@@ -75,18 +87,27 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Accounts Dashboard API is running',
+    health: '/api/health'
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'Accounts Dashboard API' });
 });
 
 // Start local server if run directly (node index.js)
-if (!process.env.VERCEL) {
-  connectDB()
+if (require.main === module || (!process.env.VERCEL && process.env.NODE_ENV !== 'test')) {
+  databaseReady
     .then(() => {
       app.listen(PORT, () => console.log(`Accounts backend running on http://localhost:${PORT}`));
     })
     .catch(err => {
       console.error('MongoDB startup error:', err);
+      process.exit(1);
     });
 }
 
