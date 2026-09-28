@@ -6,7 +6,7 @@ const normalizeApiBase = (value) => {
   return base.endsWith('/api') ? base : `${base}/api`;
 };
 
-const API = configuredApi
+export const API = configuredApi
   ? normalizeApiBase(configuredApi)
   : normalizeApiBase(import.meta.env.PROD ? 'https://accounts-dashboard-ltwo.vercel.app' : '/api');
 
@@ -40,6 +40,12 @@ export async function apiFetch(path, options = {}) {
     data = await res.json();
   } catch (err) {
     throw new Error(`Invalid JSON response: ${res.status}`);
+  }
+
+  if (res.status === 401) {
+    localStorage.removeItem('accounts_pass_auth');
+    localStorage.removeItem('accounts_token');
+    window.location.reload();
   }
 
   if (!res.ok) {
