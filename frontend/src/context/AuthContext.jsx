@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
+import { API } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -15,13 +16,13 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    fetch('/api/auth/me', {
+    fetch(`${API}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(res => {
-        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
           logout();
-        } else {
+        } else if (res.ok) {
           return res.json().then(data => {
             if (data?.user) setUser(data.user);
           });
@@ -34,7 +35,7 @@ export function AuthProvider({ children }) {
 
   async function login(password) {
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })

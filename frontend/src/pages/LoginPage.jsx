@@ -112,12 +112,6 @@ export default function LoginPage() {
             <ArrowRight className="w-4 h-4 stroke-[2.5] transition-transform group-hover:translate-x-1" />
           </button>
         </form>
-
-        <div className="mt-8 pt-5 border-t border-border/50 text-center">
-          <Text size="2xs" className="text-muted-foreground text-[11.5px]">
-            Temporary access key: <span className="font-mono text-primary font-bold">12345</span>
-          </Text>
-        </div>
       </Card>
     </Box>
   );

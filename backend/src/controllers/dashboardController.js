@@ -54,45 +54,72 @@ async function getBookingInflows(startDate, endDate) {
   return { total, byDay };
 }
 
-// Helper: get outflows exclusively from ft_booking_system -> suppliers collection (totalAmountPaid / total_amount_paid) filtered by createdAt
+// Helper: get supplier outflows from ft_booking_system -> bookings.services.payments filtered by payment date
 async function getBookingSupplierOutflows(startDate, endDate) {
   const db = getBookingDB();
   if (!db) return { total: 0, byDay: {}, byCategory: {} };
 
-  const suppliersCollection = db.collection('suppliers');
+  const bookingsCollection = db.collection('bookings');
 
-  const suppliers = await suppliersCollection.find({
-    createdAt: { $gte: startDate, $lte: endDate },
-    $or: [
-      { totalAmountPaid: { $gt: 0 } },
-      { total_amount_paid: { $gt: 0 } }
-    ]
-  }).toArray();
+  const pipeline = [
+    { $unwind: '$services' },
+    { $unwind: '$services.payments' },
+    {
+      $addFields: {
+        'services.payments.paymentDateObj': {
+          $cond: {
+            if: { $eq: [{ $type: '$services.payments.paymentDate' }, 'date'] },
+            then: '$services.payments.paymentDate',
+            else: { $toDate: '$services.payments.paymentDate' }
+          }
+        }
+      }
+    },
+    {
+      $match: {
+        'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate },
+        $or: [
+          { 'services.payments.status': { $in: ['VERIFIED', 'PAID'] } },
+          { 'services.payments.verified': true }
+        ],
+        'services.payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] }
+      }
+    },
+    {
+      $project: {
+        amount: '$services.payments.paidAmount',
+        date: '$services.payments.paymentDateObj',
+        category: '$services.supplierType'
+      }
+    }
+  ];
+
+  const results = await bookingsCollection.aggregate(pipeline).toArray();
 
   let total = 0;
   const byDay = {};
   const byCategory = {};
 
-  suppliers.forEach(s => {
-    const amt = Math.round(Number(s.totalAmountPaid ?? s.total_amount_paid ?? 0));
+  results.forEach(r => {
+    const amt = Math.round(Number(r.amount || 0));
     if (amt <= 0) return;
 
     total += amt;
 
-    // Categorization based on supplierFor (Hotels, Transport, Adventure, etc.)
+    // Categorization based on supplierType (Hotels, Transport, Adventure, etc.)
     let cat = 'SUPPLIERS';
-    if (s.supplierFor && s.supplierFor.length > 0) {
-      const typeStr = s.supplierFor.join(' ').toLowerCase();
+    if (r.category) {
+      const typeStr = r.category.toLowerCase();
       if (typeStr.includes('hotel')) cat = 'HOTELS';
       else if (typeStr.includes('transport')) cat = 'TRANSPORT';
       else if (typeStr.includes('guide')) cat = 'GUIDES';
       else if (typeStr.includes('adventure') || typeStr.includes('sightseeing')) cat = 'SIGHTSEEING';
-      else cat = s.supplierFor[0].toUpperCase();
+      else cat = r.category.toUpperCase();
     }
     byCategory[cat] = (byCategory[cat] || 0) + amt;
 
-    // Day of payment mapped from createdAt
-    const dateObj = s.createdAt ? new Date(s.createdAt) : null;
+    // Day of payment mapped from payment date
+    const dateObj = r.date ? new Date(r.date) : null;
     const day = dateObj ? dateObj.getDate() : 1;
     byDay[day] = (byDay[day] || 0) + amt;
   });

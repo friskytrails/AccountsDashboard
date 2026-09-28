@@ -40,30 +40,49 @@ app.use(cors({
 app.use(express.json());
 
 // Import booking database connection
-const { connectBookingDB } = require('./src/config/bookingDb');
+const { connectBookingDB, getBookingDB } = require('./src/config/bookingDb');
 
 // Database connection helper supporting both standalone server and Vercel serverless
 let dbPromise = null;
+let isConnecting = false;
+
 async function connectDB() {
-  if (mongoose.connection.readyState === 1) {
+  const bookingDb = getBookingDB();
+  const isConnected = mongoose.connection.readyState === 1 && Boolean(bookingDb && bookingDb.readyState === 1);
+
+  if (isConnected) {
+    if (dbPromise) await dbPromise;
     return;
   }
-  if (!dbPromise) {
+
+  if (!isConnecting) {
+    isConnecting = true;
     dbPromise = (async () => {
       if (!process.env.MONGODB_URI) {
         throw new Error('MONGODB_URI environment variable is missing');
       }
-      await mongoose.connect(process.env.MONGODB_URI);
-      console.log('Connected to MongoDB');
+      if (mongoose.connection.readyState !== 1) {
+        await mongoose.connect(process.env.MONGODB_URI);
+        console.log('Connected to MongoDB');
+      }
       await connectBookingDB();
-    })();
+    })()
+      .finally(() => {
+        isConnecting = false;
+      })
+      .catch(err => {
+        dbPromise = null;
+        throw err;
+      });
   }
+
   await dbPromise;
 }
 
 // Keep connection starting immediately for serverless/cold starts
 const databaseReady = connectDB().catch(err => {
   console.error('MongoDB initialization error:', err);
+  throw err;
 });
 
 // Middleware to ensure DB is connected before processing API requests
@@ -111,4 +130,5 @@ if (require.main === module || (!process.env.VERCEL && process.env.NODE_ENV !== 
     });
 }
 
+app.databaseReady = databaseReady;
 module.exports = app;

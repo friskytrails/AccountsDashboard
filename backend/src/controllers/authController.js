@@ -1,8 +1,14 @@
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '12345';
-const JWT_SECRET = process.env.JWT_SECRET || 'accounts_dashboard_jwt_secret_2026';
+const ADMIN_PASSWORD = (process.env.ADMIN_PASSWORD || '').trim();
+if (!ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD environment variable is missing or empty');
+}
+const JWT_SECRET = (process.env.JWT_SECRET || '').trim();
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is missing or empty');
+}
 
 async function login(req, res) {
   try {
@@ -44,4 +50,4 @@ async function getMe(req, res) {
   });
 }
 
-module.exports = { login, getMe };
+module.exports = { login, getMe, JWT_SECRET };

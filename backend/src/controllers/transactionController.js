@@ -107,28 +107,99 @@ async function getLiveOutflows(req, res) {
     const db = getBookingDB();
     if (!db) return res.json({ outflows: [], totalAmount: 0, count: 0 });
 
-    const suppliers = await db.collection('suppliers').find({
-      createdAt: { $gte: startDate, $lte: endDate },
-      $or: [
-        { totalAmountPaid: { $gt: 0 } },
-        { total_amount_paid: { $gt: 0 } }
-      ]
-    }).sort({ createdAt: -1 }).toArray();
+    const pipeline = [
+      { $unwind: '$services' },
+      { $unwind: '$services.payments' },
+      {
+        $addFields: {
+          'services.payments.paymentDateObj': {
+            $cond: {
+              if: { $eq: [{ $type: '$services.payments.paymentDate' }, 'date'] },
+              then: '$services.payments.paymentDate',
+              else: { $toDate: '$services.payments.paymentDate' }
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate },
+          $or: [
+            { 'services.payments.status': { $in: ['VERIFIED', 'PAID'] } },
+            { 'services.payments.verified': true }
+          ],
+          'services.payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] }
+        }
+      },
+      {
+        $lookup: {
+          from: 'suppliers',
+          localField: 'services.supplierSupplierId',
+          foreignField: 'supplierId',
+          as: 'supplierDoc'
+        }
+      },
+      {
+        $unwind: {
+          path: '$supplierDoc',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          _id: '$services.payments._id',
+          bookingId: '$bookingId',
+          serviceId: '$services.serviceId',
+          supplierId: '$services.supplierSupplierId',
+          supplierName: { $ifNull: ['$supplierDoc.businessName', { $ifNull: ['$services.supplierName', '$supplierDoc.fullName'] }] },
+          contactPerson: '$supplierDoc.fullName',
+          contactNumber: '$supplierDoc.contactNumber',
+          city: '$supplierDoc.city',
+          state: '$supplierDoc.state',
+          category: '$services.supplierType',
+          amount: '$services.payments.paidAmount',
+          date: '$services.payments.paymentDateObj',
+          paymentMode: '$services.payments.paymentMode',
+          status: '$services.payments.status',
+          verified: '$services.payments.verified',
+          details: '$services.payments.details',
+          addedByName: '$services.payments.addedBy'
+        }
+      },
+      { $sort: { date: -1 } }
+    ];
 
-    const outflows = suppliers.map(s => {
-      const amount = Math.round(Number(s.totalAmountPaid ?? s.total_amount_paid ?? 0));
+    const results = await db.collection('bookings').aggregate(pipeline).toArray();
+
+    const outflows = results.map(s => {
+      const amount = Math.round(Number(s.amount || 0));
+      let cat = 'SUPPLIERS';
+      if (s.category) {
+        const typeStr = s.category.toLowerCase();
+        if (typeStr.includes('hotel')) cat = 'HOTELS';
+        else if (typeStr.includes('transport')) cat = 'TRANSPORT';
+        else if (typeStr.includes('guide')) cat = 'GUIDES';
+        else if (typeStr.includes('adventure') || typeStr.includes('sightseeing')) cat = 'SIGHTSEEING';
+        else cat = s.category.toUpperCase();
+      }
+
       return {
         _id: s._id,
+        bookingId: s.bookingId,
+        serviceId: s.serviceId,
         supplierId: s.supplierId,
-        supplierName: s.businessName || s.fullName || 'Supplier',
-        contactPerson: s.fullName,
+        supplierName: s.supplierName || 'Supplier',
+        contactPerson: s.contactPerson,
         contactNumber: s.contactNumber,
-        category: (s.supplierFor && s.supplierFor[0]) ? s.supplierFor[0].toUpperCase() : 'SUPPLIERS',
+        category: cat,
         city: s.city,
         state: s.state,
         status: s.status,
-        date: s.createdAt,
-        amount
+        date: s.date,
+        amount,
+        paymentMode: s.paymentMode,
+        details: s.details,
+        addedByName: s.addedByName
       };
     });
 

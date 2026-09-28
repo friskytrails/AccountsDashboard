@@ -60,7 +60,7 @@ export default function KpiCards({
       accentGlow: 'bg-teal-500',
       badgeVariant: netCashFlow >= 0 ? 'success' : 'error',
       tagText: `${retentionRatio}% Retention`,
-      metricPill: 'Surplus Liquidity'
+      metricPill: netCashFlow >= 0 ? 'Surplus Liquidity' : 'Liquidity Deficit'
     },
     {
       title: 'Closing Treasury Balance',

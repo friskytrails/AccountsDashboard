@@ -6,7 +6,7 @@ const normalizeApiBase = (value) => {
   return base.endsWith('/api') ? base : `${base}/api`;
 };
 
-const API = configuredApi
+export const API = configuredApi
   ? normalizeApiBase(configuredApi)
   : normalizeApiBase(import.meta.env.PROD ? 'https://accounts-dashboard-ltwo.vercel.app' : '/api');
 
