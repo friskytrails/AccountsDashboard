@@ -44,7 +44,7 @@ export default function MonthSelector({ selectedMonth, selectedYear, onChange })
         variant="outline"
         size="sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="gap-2.5 px-3.5 py-2 bg-card/90 border-border/80 rounded-xl hover:border-primary/50 shadow-sm"
+        className="gap-2.5 px-3.5 py-2 bg-card/90 border-border/80 rounded-md hover:border-primary/50 shadow-sm"
       >
         <ButtonIcon as={Calendar} className="text-primary w-4 h-4" />
         <ButtonText className="font-semibold text-foreground tracking-tight text-xs">
@@ -54,7 +54,7 @@ export default function MonthSelector({ selectedMonth, selectedYear, onChange })
       </Button>
 
       {isOpen && (
-        <Card className="absolute right-0 mt-2 w-72 p-4 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 border-border/90 bg-card/95 backdrop-blur-2xl">
+        <Card className="absolute right-0 mt-2 w-72 p-4 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 border-border/90 bg-card/95 backdrop-blur-2xl rounded-lg">
           {/* Year Navigator */}
           <HStack space="md" className="items-center justify-between mb-3 px-1">
             <Button
