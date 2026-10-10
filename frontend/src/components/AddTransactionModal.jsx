@@ -36,11 +36,13 @@ import {
 } from '@/components/ui';
 
 const CATEGORIES = [
+  { value: 'SALARIES', label: 'Staff Salaries & Wages' },
+  { value: 'SUPPLIERS', label: 'Suppliers & Vendors' },
+  { value: 'OPERATIONS', label: 'Tour Operations & Fleet' },
   { value: 'HOTELS', label: 'Hotels & Accommodation' },
   { value: 'TRANSPORT', label: 'Transport & Vehicles' },
-  { value: 'GUIDES', label: 'Tour Guides' },
+  { value: 'GUIDES', label: 'Tour Guides & Leaders' },
   { value: 'SIGHTSEEING', label: 'Sightseeing & Activities' },
-  { value: 'SALARIES', label: 'Staff Salaries' },
   { value: 'MARKETING', label: 'Marketing & Ads' },
   { value: 'OTHERS', label: 'Others / Miscellaneous' },
 ];
@@ -59,10 +61,11 @@ export default function AddTransactionModal({
   onClose,
   onSuccess,
   selectedMonth = 9,
-  selectedYear = 2026
+  selectedYear = 2026,
+  initialType = 'OUTFLOW'
 }) {
-  const [type, setType] = useState('OUTFLOW');
-  const [category, setCategory] = useState('HOTELS');
+  const [type, setType] = useState(initialType);
+  const [category, setCategory] = useState(initialType === 'INFLOW' ? 'OTHERS' : 'HOTELS');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [paymentMode, setPaymentMode] = useState('BANK_TRANSFER');
@@ -72,6 +75,12 @@ export default function AddTransactionModal({
 
   useEffect(() => {
     if (isOpen) {
+      setType(initialType || 'OUTFLOW');
+      if (initialType === 'INFLOW') {
+        setCategory('OTHERS');
+      } else {
+        setCategory('HOTELS');
+      }
       const today = new Date();
       const currentYear = today.getFullYear();
       const currentMonth = today.getMonth() + 1;
@@ -83,7 +92,7 @@ export default function AddTransactionModal({
         setDate(`${selectedYear}-${m}-01`);
       }
     }
-  }, [isOpen, selectedMonth, selectedYear]);
+  }, [isOpen, selectedMonth, selectedYear, initialType]);
 
   useEffect(() => {
     if (type === 'INFLOW') {
@@ -159,12 +168,12 @@ export default function AddTransactionModal({
           <ModalBody>
             <VStack space="md">
               {/* Type Toggle Segmented Control */}
-              <Box className="p-1 bg-muted/40 border border-border/50 rounded-xl">
+              <Box className="p-1 bg-muted/40 border border-border/50 rounded-md">
                 <HStack space="xs" className="w-full">
                   <Button
                     variant={type === 'OUTFLOW' ? 'destructive' : 'ghost'}
                     size="sm"
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
                       type === 'OUTFLOW'
                         ? 'bg-destructive text-destructive-foreground shadow-md shadow-destructive/25'
                         : 'text-muted-foreground hover:text-foreground'
@@ -178,7 +187,7 @@ export default function AddTransactionModal({
                   <Button
                     variant={type === 'INFLOW' ? 'default' : 'ghost'}
                     size="sm"
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${
                       type === 'INFLOW'
                         ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25'
                         : 'text-muted-foreground hover:text-foreground'

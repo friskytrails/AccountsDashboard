@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { GluestackUIProvider } from '@/components/ui';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import DashboardLayout from './components/DashboardLayout';
 import CashFlowPage from './pages/CashFlowPage';
+import LoginPage from './pages/LoginPage';
 
-export default function App() {
+function AppRoutes() {
+  const { isAuthenticated } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(9); // September 2026 (active bookings data)
   const [selectedYear, setSelectedYear] = useState(2026);
 
@@ -15,6 +17,47 @@ export default function App() {
     setSelectedYear(y);
   };
 
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return (
+    <Routes>
+      <Route
+        element={
+          <DashboardLayout
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            onMonthChange={handleMonthChange}
+          />
+        }
+      >
+        <Route
+          path="/"
+          element={
+            <CashFlowPage
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+            />
+          }
+        />
+        {/* Fallback & other nav links redirect to dashboard */}
+        <Route
+          path="/transactions"
+          element={
+            <CashFlowPage
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default function App() {
   return (
     <GluestackUIProvider colorMode="dark">
       <AuthProvider>
@@ -31,38 +74,7 @@ export default function App() {
               }
             }}
           />
-          <Routes>
-            <Route
-              element={
-                <DashboardLayout
-                  selectedMonth={selectedMonth}
-                  selectedYear={selectedYear}
-                  onMonthChange={handleMonthChange}
-                />
-              }
-            >
-              <Route
-                path="/"
-                element={
-                  <CashFlowPage
-                    selectedMonth={selectedMonth}
-                    selectedYear={selectedYear}
-                  />
-                }
-              />
-              {/* Fallback & other nav links redirect to dashboard */}
-              <Route
-                path="/transactions"
-                element={
-                  <CashFlowPage
-                    selectedMonth={selectedMonth}
-                    selectedYear={selectedYear}
-                  />
-                }
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
-          </Routes>
+          <AppRoutes />
         </Router>
       </AuthProvider>
     </GluestackUIProvider>
