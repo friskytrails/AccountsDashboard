@@ -8,7 +8,7 @@ const TransactionSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'SALARIES', 'MARKETING', 'OTHERS'],
+    enum: ['SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'MARKETING', 'OTHERS'],
     required: true
   },
   amount: {
@@ -37,8 +37,7 @@ const TransactionSchema = new mongoose.Schema({
     default: Date.now
   },
   addedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'AdminUser',
+    type: mongoose.Schema.Types.Mixed,
     required: false
   },
   addedByName: {

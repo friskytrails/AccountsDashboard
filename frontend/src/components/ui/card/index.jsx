@@ -10,7 +10,7 @@ export const Card = React.forwardRef(({
   return (
     <div
       ref={ref}
-      className={`bg-card/85 backdrop-blur-xl text-card-foreground rounded-2xl border border-border/80 shadow-xl transition-all duration-300 hover:border-border hover:shadow-2xl ${className}`.trim()}
+      className={`bg-card/85 backdrop-blur-xl text-card-foreground border border-border/80 shadow-xl transition-all duration-300 hover:border-border hover:shadow-2xl ${className}`.trim()}
       {...props}
     >
       {children}
