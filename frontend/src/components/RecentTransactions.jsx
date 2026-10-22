@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -46,12 +47,13 @@ export default function RecentTransactions({
   onDelete,
   loading = false
 }) {
+  const navigate = useNavigate();
   // Main view tab: 'MANUAL' | 'BOOKINGS' | 'SUPPLIERS'
   const [activeTab, setActiveTab] = useState('MANUAL');
   const [filterType, setFilterType] = useState('ALL'); // For manual entries: 'ALL' | 'INFLOW' | 'OUTFLOW'
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Filtered Manual Transactions
+  // 1. Filtered Manual Transactions (search by description, category, reference number, or transaction ID)
   const filteredManual = transactions.filter((t) => {
     if (filterType === 'INFLOW' && t.type !== 'INFLOW') return false;
     if (filterType === 'OUTFLOW' && t.type !== 'OUTFLOW') return false;
@@ -60,12 +62,13 @@ export default function RecentTransactions({
       const desc = (t.description || '').toLowerCase();
       const cat = (t.category || '').toLowerCase();
       const ref = (t.referenceNumber || '').toLowerCase();
-      return desc.includes(q) || cat.includes(q) || ref.includes(q);
+      const id = (t._id || '').toString().toLowerCase();
+      return desc.includes(q) || cat.includes(q) || ref.includes(q) || id.includes(q);
     }
     return true;
   });
 
-  // 2. Filtered Live Booking Inflows
+  // 2. Filtered Live Booking Inflows (search by name, booking ID, location, package, mode, payment ID, or txn ID)
   const filteredBookings = liveInflows.filter((b) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -74,10 +77,13 @@ export default function RecentTransactions({
     const loc = (b.location || '').toLowerCase();
     const pkg = (b.packageName || '').toLowerCase();
     const mode = (b.paymentMode || '').toLowerCase();
-    return name.includes(q) || bId.includes(q) || loc.includes(q) || pkg.includes(q) || mode.includes(q);
+    const payId = (b.paymentId || '').toString().toLowerCase();
+    const txnId = (b.bookingTransactionId || '').toString().toLowerCase();
+    const id = (b._id || '').toString().toLowerCase();
+    return name.includes(q) || bId.includes(q) || loc.includes(q) || pkg.includes(q) || mode.includes(q) || payId.includes(q) || txnId.includes(q) || id.includes(q);
   });
 
-  // 3. Filtered Live Supplier Outflows
+  // 3. Filtered Live Supplier Outflows (search by supplier name, contact, category, city, supplier ID, service ID, or booking ID)
   const filteredSuppliers = liveOutflows.filter((s) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -86,7 +92,10 @@ export default function RecentTransactions({
     const cat = (s.category || '').toLowerCase();
     const city = (s.city || '').toLowerCase();
     const id = (s.supplierId || '').toLowerCase();
-    return name.includes(q) || contact.includes(q) || cat.includes(q) || city.includes(q) || id.includes(q);
+    const sId = (s._id || '').toString().toLowerCase();
+    const sBooking = (s.bookingId || '').toLowerCase();
+    const sService = (s.serviceId || '').toLowerCase();
+    return name.includes(q) || contact.includes(q) || cat.includes(q) || city.includes(q) || id.includes(q) || sId.includes(q) || sBooking.includes(q) || sService.includes(q);
   });
 
   const totalBookingSum = liveInflows.reduce((acc, curr) => acc + Number(curr.amountPaid || 0), 0);
@@ -117,15 +126,27 @@ export default function RecentTransactions({
             </Text>
           </VStack>
 
-          <Button
-            variant="default"
-            size="md"
-            onClick={onOpenAdd}
-            className="gap-2 shadow-lg shadow-primary/25 rounded-md px-4 shrink-0"
-          >
-            <ButtonIcon as={Plus} className="stroke-[2.5] w-4 h-4" />
-            <ButtonText className="text-xs font-bold">Record Transaction</ButtonText>
-          </Button>
+          <HStack space="sm" className="items-center flex-wrap">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => navigate('/full-transactions')}
+              className="gap-2 border-border/80 hover:border-primary/50 hover:bg-primary/10 rounded-lg px-3.5 shrink-0 transition-all cursor-pointer"
+            >
+              <ButtonIcon as={FileSpreadsheet} className="w-4 h-4 text-primary" />
+              <ButtonText className="text-xs font-bold text-foreground">Check Full Transactions</ButtonText>
+            </Button>
+
+            <Button
+              variant="default"
+              size="md"
+              onClick={onOpenAdd}
+              className="gap-2 shadow-lg shadow-primary/25 rounded-lg px-4 shrink-0 transition-all cursor-pointer"
+            >
+              <ButtonIcon as={Plus} className="stroke-[2.5] w-4 h-4" />
+              <ButtonText className="text-xs font-bold">Record Transaction</ButtonText>
+            </Button>
+          </HStack>
         </HStack>
 
         {/* Source Navigation Tabs */}
@@ -221,9 +242,9 @@ export default function RecentTransactions({
               <InputField
                 placeholder={
                   activeTab === 'MANUAL'
-                    ? 'Search narration...'
+                    ? 'Search narration, ref, txn ID...'
                     : activeTab === 'BOOKINGS'
-                    ? 'Search traveller, booking ID...'
+                    ? 'Search traveller, booking ID, txn ID...'
                     : 'Search supplier, city, ID...'
                 }
                 value={searchQuery}
@@ -400,6 +421,12 @@ export default function RecentTransactions({
                         <CreditCard className="w-3 h-3 text-muted-foreground" />
                         <Text size="2xs" className="font-mono text-muted-foreground uppercase text-[10px]">{b.paymentMode || 'PAYMENT'}</Text>
                       </HStack>
+                      {b.paymentId && (
+                        <>
+                          <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                          <Text size="2xs" className="text-muted-foreground font-mono text-[10px]">Txn ID: {b.paymentId}</Text>
+                        </>
+                      )}
                       {b.addedBy && (
                         <>
                           <Text size="2xs" className="text-muted-foreground/60">•</Text>

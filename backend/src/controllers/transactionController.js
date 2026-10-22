@@ -2,12 +2,28 @@ const Transaction = require('../models/Transaction');
 const { getBookingDB } = require('../config/bookingDb');
 
 const VALID_CATEGORIES = ['SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'MARKETING', 'OTHERS'];
-const VALID_PAYMENT_MODES = ['UPI', 'BANK_TRANSFER', 'CASH', 'CARD', 'CHEQUE', 'OTHER'];
+const VALID_PAYMENT_MODES = [
+  'Kalpana BOI',
+  'Kalpana PNB',
+  'Babita AU',
+  'Hari Mohan BOB',
+  'FT HDFC',
+  'Pratyush SBI',
+  'Cash',
+  'Other',
+  'UPI',
+  'BANK_TRANSFER',
+  'CASH',
+  'CARD',
+  'CHEQUE',
+  'OTHER',
+  'Supplier'
+];
 
 // GET /api/transactions?month=9&year=2026&type=OUTFLOW&page=1&limit=20
 async function getTransactions(req, res) {
   try {
-    const { month, year, type, category, page = 1, limit = 20 } = req.query;
+    const { month, year, type, category, paymentMode, page = 1, limit = 20 } = req.query;
     const filter = {};
 
     if (month && year) {
@@ -17,6 +33,7 @@ async function getTransactions(req, res) {
     }
     if (type) filter.type = type;
     if (category) filter.category = category;
+    if (paymentMode) filter.paymentMode = paymentMode;
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [transactions, total] = await Promise.all([
@@ -34,14 +51,29 @@ async function getTransactions(req, res) {
 // GET /api/transactions/live-inflows?month=9&year=2026
 async function getLiveInflows(req, res) {
   try {
-    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-
-    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const hasMonth = req.query.month !== undefined && req.query.month !== '';
+    const hasYear = req.query.year !== undefined && req.query.year !== '';
 
     const db = getBookingDB();
     if (!db) return res.json({ inflows: [], totalAmount: 0, count: 0 });
+
+    const matchConditions = [
+      {
+        $or: [
+          { 'payments.status': { $in: ['VERIFIED', 'PAID'] } },
+          { 'payments.verified': true }
+        ]
+      },
+      { 'payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] } }
+    ];
+
+    if (hasMonth && hasYear) {
+      const month = parseInt(req.query.month);
+      const year = parseInt(req.query.year);
+      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      matchConditions.push({ 'payments.paymentDateObj': { $gte: startDate, $lte: endDate } });
+    }
 
     const pipeline = [
       { $unwind: '$payments' },
@@ -58,12 +90,7 @@ async function getLiveInflows(req, res) {
       },
       {
         $match: {
-          'payments.paymentDateObj': { $gte: startDate, $lte: endDate },
-          $or: [
-            { 'payments.status': { $in: ['VERIFIED', 'PAID'] } },
-            { 'payments.verified': true }
-          ],
-          'payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] }
+          $and: matchConditions
         }
       },
       {
@@ -71,6 +98,8 @@ async function getLiveInflows(req, res) {
           _id: '$payments._id',
           bookingId: '$bookingId',
           travellerName: '$travellerName',
+          travellerEmail: '$travellerEmail',
+          travellerPhone: '$travellerPhone',
           location: '$location',
           packageName: '$packageName',
           paymentId: '$payments.paymentId',
@@ -79,7 +108,19 @@ async function getLiveInflows(req, res) {
           paymentDate: '$payments.paymentDateObj',
           status: '$payments.status',
           verified: '$payments.verified',
-          addedBy: '$payments.addedBy'
+          addedBy: '$payments.addedBy',
+          startDate: '$startDate',
+          endDate: '$endDate',
+          totalBookingAmount: '$totalAmount',
+          dueAmount: '$dueAmount',
+          assignedTo: '$assignedTo',
+          adults: '$adults',
+          children: '$children',
+          details: '$payments.details',
+          attachment: '$payments.attachment',
+          attachmentName: '$payments.attachmentName',
+          invoiceNumber: '$payments.invoiceNumber',
+          bookingTransactionId: '$transactionId'
         }
       },
       { $sort: { paymentDate: -1 } }
@@ -98,14 +139,29 @@ async function getLiveInflows(req, res) {
 // GET /api/transactions/live-outflows?month=9&year=2026
 async function getLiveOutflows(req, res) {
   try {
-    const month = parseInt(req.query.month) || new Date().getMonth() + 1;
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-
-    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const hasMonth = req.query.month !== undefined && req.query.month !== '';
+    const hasYear = req.query.year !== undefined && req.query.year !== '';
 
     const db = getBookingDB();
     if (!db) return res.json({ outflows: [], totalAmount: 0, count: 0 });
+
+    const matchConditions = [
+      {
+        $or: [
+          { 'services.payments.status': { $in: ['VERIFIED', 'PAID'] } },
+          { 'services.payments.verified': true }
+        ]
+      },
+      { 'services.payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] } }
+    ];
+
+    if (hasMonth && hasYear) {
+      const month = parseInt(req.query.month);
+      const year = parseInt(req.query.year);
+      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      matchConditions.push({ 'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate } });
+    }
 
     const pipeline = [
       { $unwind: '$services' },
@@ -123,12 +179,7 @@ async function getLiveOutflows(req, res) {
       },
       {
         $match: {
-          'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate },
-          $or: [
-            { 'services.payments.status': { $in: ['VERIFIED', 'PAID'] } },
-            { 'services.payments.verified': true }
-          ],
-          'services.payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] }
+          $and: matchConditions
         }
       },
       {
@@ -236,7 +287,7 @@ async function addTransaction(req, res) {
       category,
       amount: parsedAmount,
       description: description || '',
-      paymentMode: paymentMode || 'BANK_TRANSFER',
+      paymentMode: paymentMode || 'Kalpana BOI',
       referenceNumber: referenceNumber || '',
       date: date ? new Date(date) : new Date(),
       addedBy: req.user?.userId || undefined,

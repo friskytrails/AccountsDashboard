@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { TrendingUp, ArrowLeftRight, ChevronLeft, Plus, LogOut } from 'lucide-react';
+import { TrendingUp, ArrowLeftRight, ChevronLeft, Plus, LogOut, FileSpreadsheet } from 'lucide-react';
 import { Box, VStack, HStack, Heading, Text } from '@/components/ui';
 import { useAuth } from '../context/AuthContext';
 import MonthSelector from './MonthSelector';
@@ -26,6 +26,7 @@ export default function DashboardLayout({ selectedMonth, selectedYear, onMonthCh
   const navItems = [
     { label: 'Cash Flow Dashboard', path: '/', icon: TrendingUp },
     { label: 'Transactions & Audit', path: '/transactions', icon: ArrowLeftRight, targetId: 'transactions-audit-section' },
+    { label: 'Full Transactions', path: '/full-transactions', icon: FileSpreadsheet },
   ];
 
   const handleNavClick = (e, item) => {

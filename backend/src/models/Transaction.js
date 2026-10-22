@@ -23,8 +23,24 @@ const TransactionSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['UPI', 'BANK_TRANSFER', 'CASH', 'CARD', 'CHEQUE', 'OTHER'],
-    default: 'BANK_TRANSFER'
+    enum: [
+      'Kalpana BOI',
+      'Kalpana PNB',
+      'Babita AU',
+      'Hari Mohan BOB',
+      'FT HDFC',
+      'Pratyush SBI',
+      'Cash',
+      'Other',
+      'UPI',
+      'BANK_TRANSFER',
+      'CASH',
+      'CARD',
+      'CHEQUE',
+      'OTHER',
+      'Supplier'
+    ],
+    default: 'Kalpana BOI'
   },
   referenceNumber: {
     type: String,
