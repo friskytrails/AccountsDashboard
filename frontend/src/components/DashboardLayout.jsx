@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { TrendingUp, ArrowLeftRight, ChevronLeft, Plus, LogOut, FileSpreadsheet } from 'lucide-react';
+import { TrendingUp, ArrowLeftRight, ChevronLeft, Plus, LogOut, FileSpreadsheet, BadgePercent } from 'lucide-react';
 import { Box, VStack, HStack, Heading, Text } from '@/components/ui';
 import { useAuth } from '../context/AuthContext';
 import MonthSelector from './MonthSelector';
@@ -27,6 +27,7 @@ export default function DashboardLayout({ selectedMonth, selectedYear, onMonthCh
     { label: 'Cash Flow Dashboard', path: '/', icon: TrendingUp },
     { label: 'Transactions & Audit', path: '/transactions', icon: ArrowLeftRight, targetId: 'transactions-audit-section' },
     { label: 'Full Transactions', path: '/full-transactions', icon: FileSpreadsheet },
+    { label: 'Profit & Loss Margins', path: '/profit-margin', icon: BadgePercent },
   ];
 
   const handleNavClick = (e, item) => {
@@ -48,7 +49,8 @@ export default function DashboardLayout({ selectedMonth, selectedYear, onMonthCh
       <div className="fixed top-1/2 right-1/4 w-[500px] h-[500px] bg-sky-500/[0.02] rounded-full blur-[150px] pointer-events-none -z-10" />
 
       {/* Silky Smooth Collapsible Executive Sidebar */}
-      <Box
+      
+        <Box
         as="aside"
         className={`sticky top-0 h-screen shrink-0 bg-card/95 backdrop-blur-2xl border-r border-border/80 flex flex-col z-30 shadow-2xl transition-[width] duration-300 ease-in-out ${
           isCollapsed ? 'w-20' : 'w-72'

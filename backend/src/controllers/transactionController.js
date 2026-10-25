@@ -336,11 +336,261 @@ async function editTransaction(req, res) {
   }
 }
 
+// GET /api/transactions/booking-creators
+// Returns distinct users (from ft_booking_system.users) for the Created By dropdown
+async function getBookingCreators(req, res) {
+  try {
+    const db = getBookingDB();
+    if (!db) return res.json({ creators: [] });
+
+    const users = await db
+      .collection('users')
+      .find({}, { projection: { name: 1, email: 1 } })
+      .sort({ name: 1 })
+      .toArray();
+
+    const creators = users.map(u => ({
+      id: u._id.toString(),
+      name: u.name || u.email || 'Unknown'
+    }));
+
+    res.json({ creators });
+  } catch (err) {
+    console.error('getBookingCreators error:', err);
+    res.status(500).json({ error: 'Failed to fetch creators' });
+  }
+}
+
+// GET /api/transactions/profit-margins
+// Aggregates bookings with profit margin details, supporting comprehensive filters:
+//   bookingId, status, createdBy, fromDate, toDate,
+//   serviceStartDate, serviceEndDate, phone, viewAll, page, limit
+async function getBookingMargins(req, res) {
+  try {
+    const db = getBookingDB();
+    if (!db) {
+      return res.json({
+        summary: { totalPackageCost: 0, totalPaidAmount: 0, totalDueAmount: 0, totalProfitMargin: 0, overallMarginPercent: 0, totalCount: 0 },
+        bookings: [],
+        pagination: { page: 1, limit: 50, totalPages: 0, total: 0 }
+      });
+    }
+
+    const {
+      bookingId,
+      status,
+      createdBy,
+      fromDate,
+      toDate,
+      serviceStartDate,
+      serviceEndDate,
+      phone,
+      viewAll,
+      page = 1,
+      limit = 50
+    } = req.query;
+
+    const isViewAll = viewAll === 'true' || viewAll === true;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const maxLimit = isViewAll ? 10000 : 500;
+    const limitNum = Math.min(maxLimit, Math.max(1, parseInt(limit) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build the match stage
+    const match = {};
+
+    if (bookingId && bookingId.trim()) {
+      const q = bookingId.trim();
+      match.$or = [
+        { bookingId: { $regex: q, $options: 'i' } },
+        { transactionId: { $regex: q, $options: 'i' } },
+        { paymentId: { $regex: q, $options: 'i' } },
+        { 'payments.paymentId': { $regex: q, $options: 'i' } },
+        { 'payments.details': { $regex: q, $options: 'i' } },
+        { 'payments.invoiceNumber': { $regex: q, $options: 'i' } }
+      ];
+    }
+    if (status && status !== 'ALL' && status !== '') {
+      match.status = status;
+    }
+    if (createdBy && createdBy !== 'ALL' && createdBy !== '') {
+      const mongoose = require('mongoose');
+      const conditions = [createdBy.toString()];
+      if (mongoose.Types.ObjectId.isValid(createdBy)) {
+        conditions.push(new mongoose.Types.ObjectId(createdBy));
+      }
+      match.createdBy = { $in: conditions };
+    }
+    if (phone && phone.trim()) {
+      match.travellerPhone = { $regex: phone.trim().replace(/[^\d]/g, ''), $options: 'i' };
+    }
+
+    // Booking date range (createdAt)
+    if (!viewAll || viewAll === 'false') {
+      if (fromDate || toDate) {
+        match.createdAt = {};
+        if (fromDate) match.createdAt.$gte = new Date(fromDate);
+        if (toDate) {
+          const to = new Date(toDate);
+          to.setHours(23, 59, 59, 999);
+          match.createdAt.$lte = to;
+        }
+      }
+    }
+
+    // Service date range (startDate / endDate of trip)
+    if (serviceStartDate) {
+      match.startDate = { $gte: new Date(serviceStartDate) };
+    }
+    if (serviceEndDate) {
+      match.endDate = { $lte: (() => { const d = new Date(serviceEndDate); d.setHours(23,59,59,999); return d; })() };
+    }
+
+    // Pipeline: add marginPercentage, lookup creator name, facet for summary + paged rows
+    const pipeline = [
+      { $match: match },
+      {
+        $addFields: {
+          marginPercentage: {
+            $cond: [
+              { $gt: [{ $toDouble: '$totalAmount' }, 0] },
+              {
+                $multiply: [
+                  { $divide: [{ $toDouble: { $ifNull: ['$profitMargin', 0] } }, { $toDouble: '$totalAmount' }] },
+                  100
+                ]
+              },
+              0
+            ]
+          },
+          createdByStr: { $toString: '$createdBy' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          let: { cbId: '$createdBy' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ['$_id', '$$cbId'] },
+                    { $eq: [{ $toString: '$_id' }, { $toString: '$$cbId' }] }
+                  ]
+                }
+              }
+            },
+            { $project: { name: 1 } }
+          ],
+          as: 'creatorDoc'
+        }
+      },
+      {
+        $addFields: {
+          creatorName: {
+            $ifNull: [{ $arrayElemAt: ['$creatorDoc.name', 0] }, 'Unknown']
+          }
+        }
+      },
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                totalPackageCost: { $sum: { $toDouble: { $ifNull: ['$totalAmount', 0] } } },
+                totalPaidAmount: { $sum: { $toDouble: { $ifNull: ['$paidAmount', 0] } } },
+                totalDueAmount: { $sum: { $toDouble: { $ifNull: ['$dueAmount', 0] } } },
+                totalProfitMargin: { $sum: { $toDouble: { $ifNull: ['$profitMargin', 0] } } },
+                totalCount: { $sum: 1 }
+              }
+            }
+          ],
+          bookings: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $project: {
+                _id: 0,
+                bookingId: 1,
+                travellerName: 1,
+                travellerPhone: 1,
+                packageName: 1,
+                location: 1,
+                totalAmount: 1,
+                paidAmount: 1,
+                dueAmount: 1,
+                profitMargin: 1,
+                marginPercentage: { $round: ['$marginPercentage', 2] },
+                startDate: 1,
+                endDate: 1,
+                status: 1,
+                tripStatus: 1,
+                createdAt: 1,
+                creatorName: 1,
+                adults: 1,
+                children: 1
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    const [result] = await db.collection('bookings').aggregate(pipeline).toArray();
+
+    const rawSummary = result?.summary?.[0] || {};
+    const totalPackageCost = Math.round(rawSummary.totalPackageCost || 0);
+    const totalPaidAmount = Math.round(rawSummary.totalPaidAmount || 0);
+    const totalDueAmount = Math.round(rawSummary.totalDueAmount || 0);
+    const totalProfitMargin = Math.round(rawSummary.totalProfitMargin || 0);
+    const totalCount = rawSummary.totalCount || 0;
+    const overallMarginPercent =
+      totalPackageCost > 0
+        ? +((totalProfitMargin / totalPackageCost) * 100).toFixed(2)
+        : 0;
+
+    const bookings = (result?.bookings || []).map(b => ({
+      ...b,
+      totalAmount: Math.round(Number(b.totalAmount || 0)),
+      paidAmount: Math.round(Number(b.paidAmount || 0)),
+      dueAmount: Math.round(Number(b.dueAmount || 0)),
+      profitMargin: Math.round(Number(b.profitMargin || 0)),
+      marginPercentage: +(b.marginPercentage || 0).toFixed(2)
+    }));
+
+    res.json({
+      summary: {
+        totalPackageCost,
+        totalPaidAmount,
+        totalDueAmount,
+        totalProfitMargin,
+        overallMarginPercent,
+        totalCount
+      },
+      bookings,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalCount / limitNum),
+        total: totalCount
+      }
+    });
+  } catch (err) {
+    console.error('getBookingMargins error:', err);
+    res.status(500).json({ error: 'Failed to fetch booking margins' });
+  }
+}
+
 module.exports = {
   getTransactions,
   getLiveInflows,
   getLiveOutflows,
   addTransaction,
   deleteTransaction,
-  editTransaction
+  editTransaction,
+  getBookingCreators,
+  getBookingMargins
 };
