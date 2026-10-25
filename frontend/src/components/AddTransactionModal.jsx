@@ -48,12 +48,14 @@ const CATEGORIES = [
 ];
 
 const PAYMENT_MODES = [
-  { value: 'BANK_TRANSFER', label: 'Bank Transfer (NEFT/IMPS)' },
-  { value: 'UPI', label: 'UPI' },
-  { value: 'CASH', label: 'Cash' },
-  { value: 'CARD', label: 'Credit / Debit Card' },
-  { value: 'CHEQUE', label: 'Cheque' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'Kalpana BOI', label: 'Kalpana BOI' },
+  { value: 'Kalpana PNB', label: 'Kalpana PNB' },
+  { value: 'Babita AU', label: 'Babita AU' },
+  { value: 'Hari Mohan BOB', label: 'Hari Mohan BOB' },
+  { value: 'FT HDFC', label: 'FT HDFC' },
+  { value: 'Pratyush SBI', label: 'Pratyush SBI' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Other', label: 'Other' },
 ];
 
 export default function AddTransactionModal({
@@ -68,7 +70,7 @@ export default function AddTransactionModal({
   const [category, setCategory] = useState(initialType === 'INFLOW' ? 'OTHERS' : 'HOTELS');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
-  const [paymentMode, setPaymentMode] = useState('BANK_TRANSFER');
+  const [paymentMode, setPaymentMode] = useState('Kalpana BOI');
   const [description, setDescription] = useState('');
   const [referenceNumber, setReferenceNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -278,9 +280,9 @@ export default function AddTransactionModal({
               )}
 
               {/* Payment Mode */}
-              <FormControl>
+              <FormControl isRequired>
                 <FormControlLabel>
-                  <FormControlLabelText>Payment Mode / Settlement Channel</FormControlLabelText>
+                  <FormControlLabelText>Payment Mode *</FormControlLabelText>
                 </FormControlLabel>
                 <Select
                   selectedValue={selectedPaymentObj?.label}

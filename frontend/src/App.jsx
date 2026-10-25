@@ -5,6 +5,8 @@ import { GluestackUIProvider } from '@/components/ui';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import DashboardLayout from './components/DashboardLayout';
 import CashFlowPage from './pages/CashFlowPage';
+import FullTransactionsPage from './pages/FullTransactionsPage';
+import ProfitMarginPage from './pages/ProfitMarginPage';
 import LoginPage from './pages/LoginPage';
 
 function AppRoutes() {
@@ -49,6 +51,21 @@ function AppRoutes() {
               selectedMonth={selectedMonth}
               selectedYear={selectedYear}
             />
+          }
+        />
+        <Route
+          path="/full-transactions"
+          element={
+            <FullTransactionsPage
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+            />
+          }
+        />
+        <Route
+          path="/profit-margin"
+          element={
+            <ProfitMarginPage />
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

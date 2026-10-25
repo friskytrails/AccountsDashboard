@@ -6,7 +6,9 @@ const {
   getLiveOutflows,
   addTransaction,
   deleteTransaction,
-  editTransaction
+  editTransaction,
+  getBookingCreators,
+  getBookingMargins
 } = require('../controllers/transactionController');
 const { requireAuth } = require('../middleware/authMiddleware');
 
@@ -14,6 +16,8 @@ const { requireAuth } = require('../middleware/authMiddleware');
 router.get('/', requireAuth, getTransactions);
 router.get('/live-inflows', requireAuth, getLiveInflows);
 router.get('/live-outflows', requireAuth, getLiveOutflows);
+router.get('/profit-margins', requireAuth, getBookingMargins);
+router.get('/booking-creators', requireAuth, getBookingCreators);
 router.post('/', requireAuth, addTransaction);
 router.put('/:id', requireAuth, editTransaction);
 router.delete('/:id', requireAuth, deleteTransaction);
