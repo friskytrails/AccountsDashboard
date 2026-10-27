@@ -26,9 +26,11 @@ async function getTransactions(req, res) {
     const { month, year, type, category, paymentMode, page = 1, limit = 20 } = req.query;
     const filter = {};
 
-    if (month && year) {
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1, 0, 0, 0);
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59, 999);
+    const monthNum = parseInt(month, 10);
+    const yearNum = parseInt(year, 10);
+    if (!isNaN(monthNum) && !isNaN(yearNum) && monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
+      const startDate = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
+      const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
       filter.date = { $gte: startDate, $lte: endDate };
     }
     if (type) filter.type = type;
@@ -51,8 +53,10 @@ async function getTransactions(req, res) {
 // GET /api/transactions/live-inflows?month=9&year=2026
 async function getLiveInflows(req, res) {
   try {
-    const hasMonth = req.query.month !== undefined && req.query.month !== '';
-    const hasYear = req.query.year !== undefined && req.query.year !== '';
+    const month = parseInt(req.query.month, 10);
+    const year = parseInt(req.query.year, 10);
+    const hasMonth = !isNaN(month) && month >= 1 && month <= 12;
+    const hasYear = !isNaN(year) && year >= 2000;
 
     const db = getBookingDB();
     if (!db) return res.json({ inflows: [], totalAmount: 0, count: 0 });
@@ -68,8 +72,6 @@ async function getLiveInflows(req, res) {
     ];
 
     if (hasMonth && hasYear) {
-      const month = parseInt(req.query.month);
-      const year = parseInt(req.query.year);
       const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
       matchConditions.push({ 'payments.paymentDateObj': { $gte: startDate, $lte: endDate } });
@@ -139,8 +141,10 @@ async function getLiveInflows(req, res) {
 // GET /api/transactions/live-outflows?month=9&year=2026
 async function getLiveOutflows(req, res) {
   try {
-    const hasMonth = req.query.month !== undefined && req.query.month !== '';
-    const hasYear = req.query.year !== undefined && req.query.year !== '';
+    const month = parseInt(req.query.month, 10);
+    const year = parseInt(req.query.year, 10);
+    const hasMonth = !isNaN(month) && month >= 1 && month <= 12;
+    const hasYear = !isNaN(year) && year >= 2000;
 
     const db = getBookingDB();
     if (!db) return res.json({ outflows: [], totalAmount: 0, count: 0 });
@@ -156,8 +160,6 @@ async function getLiveOutflows(req, res) {
     ];
 
     if (hasMonth && hasYear) {
-      const month = parseInt(req.query.month);
-      const year = parseInt(req.query.year);
       const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
       matchConditions.push({ 'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate } });

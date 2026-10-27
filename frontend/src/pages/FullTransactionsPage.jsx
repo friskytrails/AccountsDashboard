@@ -86,14 +86,21 @@ function getInitials(name = '') {
   return name.slice(0, 2).toUpperCase();
 }
 
-export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+export default function FullTransactionsPage({ selectedMonth: propMonth, selectedYear: propYear }) {
   const navigate = useNavigate();
   const outletCtx = useOutletContext() || {};
+  const selectedMonth = propMonth || outletCtx.selectedMonth || 10;
+  const selectedYear = propYear || outletCtx.selectedYear || 2026;
 
   // Tab: 'BOOKINGS' (Leads) | 'MANUAL' | 'SUPPLIERS'
   const [activeTab, setActiveTab] = useState('BOOKINGS');
-  // Time scope: 'ALL_TIME' | 'MONTH'
-  const [timeScope, setTimeScope] = useState('ALL_TIME');
+  // Time scope: 'MONTH' | 'ALL_TIME' (defaults to active selected month so month selector works as expected)
+  const [timeScope, setTimeScope] = useState('MONTH');
   // Selected payment mode channel
   const [selectedChannel, setSelectedChannel] = useState('All Channels');
   // Search query
@@ -111,12 +118,18 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
   const [outflows, setOutflows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Auto-switch to MONTH scope whenever user changes month/year in header
+  useEffect(() => {
+    setTimeScope('MONTH');
+  }, [selectedMonth, selectedYear]);
+
   // Load data
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      const monthQuery = timeScope === 'MONTH' ? `?month=${selectedMonth}&year=${selectedYear}` : '';
-      const manualMonthQuery = timeScope === 'MONTH' ? `?month=${selectedMonth}&year=${selectedYear}&limit=500` : '?limit=1000';
+      const isMonth = timeScope === 'MONTH';
+      const monthQuery = isMonth ? `?month=${selectedMonth}&year=${selectedYear}` : '';
+      const manualMonthQuery = isMonth ? `?month=${selectedMonth}&year=${selectedYear}&limit=500` : '?limit=1000';
 
       const [inflowsRes, manualRes, outflowsRes] = await Promise.all([
         apiFetch(`/transactions/live-inflows${monthQuery}`),
@@ -158,6 +171,30 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Helper to check if a date string falls inside the active selected month & year
+  const matchesSelectedMonth = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    return d.getMonth() + 1 === Number(selectedMonth) && d.getFullYear() === Number(selectedYear);
+  };
+
+  // Scoped count helpers for tab badges
+  const displayedInflowsCount = useMemo(() => {
+    if (timeScope !== 'MONTH') return inflows.length;
+    return inflows.filter((b) => matchesSelectedMonth(b.paymentDate)).length;
+  }, [inflows, timeScope, selectedMonth, selectedYear]);
+
+  const displayedManualCount = useMemo(() => {
+    if (timeScope !== 'MONTH') return manualTx.length;
+    return manualTx.filter((t) => matchesSelectedMonth(t.date)).length;
+  }, [manualTx, timeScope, selectedMonth, selectedYear]);
+
+  const displayedOutflowsCount = useMemo(() => {
+    if (timeScope !== 'MONTH') return outflows.length;
+    return outflows.filter((s) => matchesSelectedMonth(s.date)).length;
+  }, [outflows, timeScope, selectedMonth, selectedYear]);
+
   // 1. Channel stats with counts and sums for Leads (Customer Inflows)
   const channelStats = useMemo(() => {
     const stats = {};
@@ -165,7 +202,11 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
       stats[ch] = { count: 0, totalAmount: 0 };
     });
 
-    inflows.forEach((item) => {
+    const scopedInflows = timeScope === 'MONTH'
+      ? inflows.filter((item) => matchesSelectedMonth(item.paymentDate))
+      : inflows;
+
+    scopedInflows.forEach((item) => {
       const norm = normalizeMode(item.paymentMode);
       const amt = Number(item.amountPaid || 0);
 
@@ -182,11 +223,16 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
     });
 
     return stats;
-  }, [inflows]);
+  }, [inflows, timeScope, selectedMonth, selectedYear]);
 
   // 2. Filtered & Sorted Bookings
   const filteredBookings = useMemo(() => {
     let list = inflows.filter((b) => {
+      // Month scope check
+      if (timeScope === 'MONTH' && !matchesSelectedMonth(b.paymentDate)) {
+        return false;
+      }
+
       // Channel filter
       if (selectedChannel !== 'All Channels') {
         const norm = normalizeMode(b.paymentMode);
@@ -240,11 +286,14 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
     });
 
     return list;
-  }, [inflows, selectedChannel, searchQuery, sortBy]);
+  }, [inflows, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery, sortBy]);
 
   // 3. Filtered Manual entries
   const filteredManual = useMemo(() => {
     return manualTx.filter((t) => {
+      if (timeScope === 'MONTH' && !matchesSelectedMonth(t.date)) {
+        return false;
+      }
       if (selectedChannel !== 'All Channels') {
         const norm = normalizeMode(t.paymentMode);
         if (norm !== selectedChannel) return false;
@@ -259,11 +308,14 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
       }
       return true;
     });
-  }, [manualTx, selectedChannel, searchQuery]);
+  }, [manualTx, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
   // 4. Filtered Suppliers
   const filteredSuppliers = useMemo(() => {
     return outflows.filter((s) => {
+      if (timeScope === 'MONTH' && !matchesSelectedMonth(s.date)) {
+        return false;
+      }
       if (selectedChannel !== 'All Channels') {
         const norm = normalizeMode(s.paymentMode);
         if (norm !== selectedChannel) return false;
@@ -278,7 +330,7 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
       }
       return true;
     });
-  }, [outflows, selectedChannel, searchQuery]);
+  }, [outflows, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
   // Active counts & totals
   const totalVolume = filteredBookings.reduce((sum, b) => sum + Number(b.amountPaid || 0), 0);
@@ -368,6 +420,16 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
             <div className="inline-flex p-1 bg-muted/60 border border-border/70 rounded-xl">
               <button
                 type="button"
+                onClick={() => setTimeScope('MONTH')}
+                className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${timeScope === 'MONTH'
+                  ? 'bg-card text-emerald-400 font-bold shadow-sm border border-emerald-500/40'
+                  : 'text-muted-foreground hover:text-foreground'
+                  }`}
+              >
+                Month ({MONTH_NAMES[selectedMonth - 1] || selectedMonth} {selectedYear})
+              </button>
+              <button
+                type="button"
                 onClick={() => setTimeScope('ALL_TIME')}
                 className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${timeScope === 'ALL_TIME'
                   ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
@@ -375,16 +437,6 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
                   }`}
               >
                 All Time
-              </button>
-              <button
-                type="button"
-                onClick={() => setTimeScope('MONTH')}
-                className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${timeScope === 'MONTH'
-                  ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
-                  : 'text-muted-foreground hover:text-foreground'
-                  }`}
-              >
-                Month ({selectedMonth}/{selectedYear})
               </button>
             </div>
           </div>
@@ -405,7 +457,7 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
             <Users className="w-3.5 h-3.5 text-emerald-400" />
             <span>Customer Inflows (Leads)</span>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400">
-              {inflows.length}
+              {displayedInflowsCount}
             </span>
           </button>
 
@@ -420,7 +472,7 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
             <FileSpreadsheet className="w-3.5 h-3.5 text-sky-400" />
             <span>Manual Treasury</span>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground">
-              {manualTx.length}
+              {displayedManualCount}
             </span>
           </button>
 
@@ -435,7 +487,7 @@ export default function FullTransactionsPage({ selectedMonth, selectedYear }) {
             <Building2 className="w-3.5 h-3.5 text-rose-400" />
             <span>Supplier Outflows</span>
             <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-muted text-muted-foreground">
-              {outflows.length}
+              {displayedOutflowsCount}
             </span>
           </button>
         </div>
