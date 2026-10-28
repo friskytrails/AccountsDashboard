@@ -198,7 +198,7 @@ export default function DashboardLayout({ selectedMonth, selectedYear, onMonthCh
 
         {/* Content Canvas */}
         <Box as="main" className="px-8 xl:px-12 py-10 flex-1 overflow-x-hidden">
-          <Outlet context={{ handleOpenAdd, refreshKey }} />
+          <Outlet context={{ handleOpenAdd, refreshKey, selectedMonth, selectedYear, onMonthChange }} />
         </Box>
       </Box>
 
