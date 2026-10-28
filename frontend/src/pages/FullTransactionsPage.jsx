@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -123,8 +123,20 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     setTimeScope('MONTH');
   }, [selectedMonth, selectedYear]);
 
+  // Request sequence ref & abort controller ref to prevent obsolete requests from overwriting state
+  const requestSeqRef = useRef(0);
+  const abortControllerRef = useRef(null);
+
   // Load data
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
+    // Cancel prior in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const seq = ++requestSeqRef.current;
+
     setLoading(true);
     try {
       const isMonth = timeScope === 'MONTH';
@@ -132,25 +144,40 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       const manualMonthQuery = isMonth ? `?month=${selectedMonth}&year=${selectedYear}&limit=500` : '?limit=1000';
 
       const [inflowsRes, manualRes, outflowsRes] = await Promise.all([
-        apiFetch(`/transactions/live-inflows${monthQuery}`),
-        apiFetch(`/transactions${manualMonthQuery}`),
-        apiFetch(`/transactions/live-outflows${monthQuery}`)
+        apiFetch(`/transactions/live-inflows${monthQuery}`, { signal: controller.signal }),
+        apiFetch(`/transactions${manualMonthQuery}`, { signal: controller.signal }),
+        apiFetch(`/transactions/live-outflows${monthQuery}`, { signal: controller.signal })
       ]);
 
-      setInflows(inflowsRes.inflows || []);
-      setManualTx(manualRes.transactions || []);
-      setOutflows(outflowsRes.outflows || []);
+      // Commit results only if this request is still the latest one
+      if (seq === requestSeqRef.current) {
+        setInflows(inflowsRes.inflows || []);
+        setManualTx(manualRes.transactions || []);
+        setOutflows(outflowsRes.outflows || []);
+      }
     } catch (err) {
-      console.error('Failed to load full transactions:', err);
-      toast.error('Failed to load transaction ledger');
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        return; // Obsolete request aborted; ignore silently
+      }
+      if (seq === requestSeqRef.current) {
+        console.error('Failed to load full transactions:', err);
+        toast.error('Failed to load transaction ledger');
+      }
     } finally {
-      setLoading(false);
+      if (seq === requestSeqRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [timeScope, selectedMonth, selectedYear]);
 
   useEffect(() => {
     loadTransactions();
-  }, [timeScope, selectedMonth, selectedYear]);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [loadTransactions]);
 
   // Toggle row expansion
   const toggleExpand = (id) => {
@@ -171,12 +198,12 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Helper to check if a date string falls inside the active selected month & year
+  // Helper to check if a date string falls inside the active selected month & year (UTC calendar)
   const matchesSelectedMonth = (dateStr) => {
     if (!dateStr) return false;
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return false;
-    return d.getMonth() + 1 === Number(selectedMonth) && d.getFullYear() === Number(selectedYear);
+    return d.getUTCMonth() + 1 === Number(selectedMonth) && d.getUTCFullYear() === Number(selectedYear);
   };
 
   // Scoped count helpers for tab badges

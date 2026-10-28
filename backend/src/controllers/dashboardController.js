@@ -143,7 +143,7 @@ async function getManualFlows(startDate, endDate) {
     transactions.forEach(t => {
       const amt = Math.round(Number(t.amount || 0));
       if (amt <= 0) return;
-      const day = new Date(t.date).getDate();
+      const day = new Date(t.date).getUTCDate();
 
       if (t.type === 'INFLOW') {
         manualInflow += amt;
@@ -169,14 +169,14 @@ async function getMonthlySummary(req, res) {
     const month = parseInt(req.query.month) || new Date().getMonth() + 1;
     const year = parseInt(req.query.year) || new Date().getFullYear();
 
-    const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
     // Previous month calculation
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
-    const prevStart = new Date(prevYear, prevMonth - 1, 1, 0, 0, 0, 0);
-    const prevEnd = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999);
+    const prevStart = new Date(Date.UTC(prevYear, prevMonth - 1, 1, 0, 0, 0, 0));
+    const prevEnd = new Date(Date.UTC(prevYear, prevMonth, 0, 23, 59, 59, 999));
 
     // --- CURRENT MONTH INFLOWS & OUTFLOWS ---
     // 1. Live Inflows from ft_booking_system (customer booking payments)
@@ -232,7 +232,7 @@ async function getMonthlySummary(req, res) {
       .sort((a, b) => b.amount - a.amount);
 
     // Build complete daily trend array for every day of the month
-    const daysInMonth = new Date(year, month, 0).getDate();
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const dailyTrend = Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
       const inflow = (bookingInflows.byDay[day] || 0) + (manualFlows.inflowByDay[day] || 0);

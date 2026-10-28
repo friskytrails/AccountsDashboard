@@ -29,8 +29,8 @@ async function getTransactions(req, res) {
     const monthNum = parseInt(month, 10);
     const yearNum = parseInt(year, 10);
     if (!isNaN(monthNum) && !isNaN(yearNum) && monthNum >= 1 && monthNum <= 12 && yearNum >= 2000) {
-      const startDate = new Date(yearNum, monthNum - 1, 1, 0, 0, 0, 0);
-      const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
+      const startDate = new Date(Date.UTC(yearNum, monthNum - 1, 1, 0, 0, 0, 0));
+      const endDate = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999));
       filter.date = { $gte: startDate, $lte: endDate };
     }
     if (type) filter.type = type;
@@ -72,8 +72,8 @@ async function getLiveInflows(req, res) {
     ];
 
     if (hasMonth && hasYear) {
-      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+      const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
       matchConditions.push({ 'payments.paymentDateObj': { $gte: startDate, $lte: endDate } });
     }
 
@@ -160,8 +160,8 @@ async function getLiveOutflows(req, res) {
     ];
 
     if (hasMonth && hasYear) {
-      const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+      const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+      const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
       matchConditions.push({ 'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate } });
     }
 
