@@ -21,7 +21,10 @@ import {
   Package,
   BadgeIndianRupee,
   Filter,
-  Download
+  Download,
+  ExternalLink,
+  X,
+  Image as ImageIcon
 } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import toast from 'react-hot-toast';
@@ -32,7 +35,7 @@ import {
   Text,
   Heading
 } from '@/components/ui';
-
+import { useMemo } from 'react';
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatINR(n) {
@@ -188,143 +191,164 @@ function SortHeader({ label, field, sortBy, onSort }) {
 
 // ─── Booking Row ──────────────────────────────────────────────────────────────
 
-function BookingRow({ booking, copiedId, onCopy }) {
-  const margin = Number(booking.profitMargin || 0);
-  const pct = Number(booking.marginPercentage || 0);
+// ─── Booking Row ──────────────────────────────────────────────────────────────
+
+function BookingRow({ row, copiedId, onCopy, onPreviewSS }) {
+  const margin = row.profitMargin ?? 0;
   const isProfit = margin > 0;
   const isLoss = margin < 0;
-  const due = Number(booking.dueAmount || 0);
+  const pct = Number(row.marginPercentage) || 0;
+  const bmsUrl = row.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${row.bookingId}` : null;
 
   const marginColorClass = isProfit
     ? 'text-emerald-400'
     : isLoss
-    ? 'text-rose-400'
-    : 'text-slate-400';
+      ? 'text-rose-400'
+      : 'text-slate-400';
 
   const marginBgClass = isProfit
     ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
     : isLoss
-    ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-    : 'bg-slate-500/10 border-slate-500/20 text-slate-400';
-
-  const tripStatusColors = {
-    'Trip Completed': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
-    'Fulfillment Done': 'bg-sky-500/10 text-sky-400 border-sky-500/25',
-    'Under Process': 'bg-amber-500/10 text-amber-400 border-amber-500/25',
-    'Pending': 'bg-orange-500/10 text-orange-400 border-orange-500/25',
-    'Postponed': 'bg-violet-500/10 text-violet-400 border-violet-500/25',
-    'Cash Refund Done': 'bg-rose-500/10 text-rose-400 border-rose-500/25',
-    'No Refund': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-  };
+      ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+      : 'bg-slate-500/10 border-slate-500/20 text-slate-400';
 
   return (
-    <tr className="group border-b border-border/40 hover:bg-muted/30 transition-colors duration-150">
-      {/* Booking ID */}
+    <tr className="group border-b border-border/40 hover:bg-muted/30 transition-colors duration-150 text-xs">
+      {/* 1. Booking ID with direct BMS link */}
       <td className="px-4 py-3.5 whitespace-nowrap">
         <HStack space="xs" className="items-center">
-          <span className="text-[13px] font-black text-orange-400 tracking-wide font-mono">
-            {booking.bookingId}
+          {bmsUrl ? (
+            <a
+              href={bmsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all shadow-sm group/bms"
+              title={`Open ${row.bookingId} in BMS`}
+            >
+              <span>{row.bookingId}</span>
+              <ExternalLink className="w-3 h-3 transition-transform group-hover/bms:translate-x-0.5 group-hover/bms:-translate-y-0.5" />
+            </a>
+          ) : (
+            <span className="text-xs font-semibold text-orange-400">
+              {row.bookingId || '—'}
+            </span>
+          )}
+          {row.bookingId && (
+            <button
+              type="button"
+              onClick={() => onCopy(row.bookingId, `b-${row.rowKey}`)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
+              title="Copy Booking ID"
+            >
+              {copiedId === `b-${row.rowKey}` ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+        </HStack>
+      </td>
+
+      {/* 2. Payment ID */}
+      <td className="px-4 py-3.5 whitespace-nowrap">
+        <HStack space="xs" className="items-center">
+          <span className="text-xs text-foreground font-medium tabular-nums">
+            {row.paymentId || '—'}
           </span>
+          {row.paymentId && row.paymentId !== '—' && (
+            <button
+              type="button"
+              onClick={() => onCopy(row.paymentId, `p-${row.rowKey}`)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
+              title="Copy Payment ID"
+            >
+              {copiedId === `p-${row.rowKey}` ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+        </HStack>
+      </td>
+
+      {/* 3. Settlement Channel */}
+      <td className="px-4 py-3.5 whitespace-nowrap">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/80 border border-border/80 text-foreground">
+          {row.settlementChannel || '—'}
+        </span>
+      </td>
+
+      {/* 4. Txn ID */}
+      <td className="px-4 py-3.5 whitespace-nowrap">
+        <HStack space="xs" className="items-center">
+          <span className="text-xs text-muted-foreground max-w-[130px] truncate tabular-nums" title={row.txnId}>
+            {row.txnId || '—'}
+          </span>
+          {row.txnId && row.txnId !== '—' && (
+            <button
+              type="button"
+              onClick={() => onCopy(row.txnId, `t-${row.rowKey}`)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
+              title="Copy Txn ID"
+            >
+              {copiedId === `t-${row.rowKey}` ? (
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <Copy className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+        </HStack>
+      </td>
+
+      {/* 5. SS (Screenshot / Proof) */}
+      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+        {row.screenshot ? (
           <button
             type="button"
-            onClick={() => onCopy(booking.bookingId)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer"
+            onClick={() => onPreviewSS(row.screenshot, `Booking ${row.bookingId} - Payment Proof`)}
+            className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-[11px] font-bold transition-all shadow-sm cursor-pointer"
+            title="Click to view Screenshot"
           >
-            {copiedId === booking.bookingId
-              ? <Check className="w-3.5 h-3.5 text-emerald-400" />
-              : <Copy className="w-3.5 h-3.5" />
-            }
+            <ImageIcon className="w-3.5 h-3.5" />
           </button>
-        </HStack>
+        ) : (
+          <span className="text-xs text-muted-foreground/50">—</span>
+        )}
       </td>
 
-      {/* Booking Date */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <HStack space="xs" className="items-center text-muted-foreground">
-          <Calendar className="w-3.5 h-3.5 shrink-0" />
-          <span className="text-[12px]">{formatDate(booking.createdAt)}</span>
-        </HStack>
-      </td>
-
-      {/* Client */}
-      <td className="px-4 py-3.5">
-        <HStack space="sm" className="items-center">
-          <div className={`w-7 h-7 rounded-full bg-gradient-to-br ${avatarColor(booking.travellerName)} flex items-center justify-center text-white text-[9px] font-black shrink-0`}>
-            {getInitials(booking.travellerName)}
-          </div>
-          <span className="text-[13px] font-semibold text-foreground whitespace-nowrap">
-            {booking.travellerName || '—'}
-          </span>
-        </HStack>
-      </td>
-
-      {/* Package */}
-      <td className="px-4 py-3.5 max-w-[180px]">
-        <span className="text-[12px] text-muted-foreground/90 line-clamp-2 leading-snug">
-          {booking.packageName || '—'}
-        </span>
-      </td>
-
-      {/* Total */}
+      {/* 6. Amount (Payment Amount) */}
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <span className="text-[13px] font-bold text-sky-300 tabular-nums">
-          {formatINRFull(booking.totalAmount)}
+        <span className="text-xs font-bold text-foreground tabular-nums">
+          {formatINRFull(row.amount)}
         </span>
       </td>
 
-      {/* Paid */}
+      {/* 7. Payment Date */}
+      <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+        {formatDate(row.paymentDate)}
+      </td>
+
+      {/* 8. Total Package Amount */}
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <span className="text-[13px] font-bold text-emerald-400 tabular-nums">
-          {formatINRFull(booking.paidAmount)}
+        <span className="text-xs font-bold text-sky-300 tabular-nums">
+          {formatINRFull(row.totalAmount)}
         </span>
       </td>
 
-      {/* Due */}
+      {/* 9. Margin (Profit / Loss Margin & Percentage) */}
       <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <span className={`text-[13px] font-bold tabular-nums ${due > 0 ? 'text-rose-400' : 'text-slate-500'}`}>
-          {formatINRFull(booking.dueAmount)}
-        </span>
-      </td>
-
-      {/* Profit / Loss Margin — the star column */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <VStack space="2xs">
-          <span className={`text-[13px] font-black tabular-nums ${marginColorClass}`}>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className={`text-xs font-bold tabular-nums ${marginColorClass}`}>
             {isProfit ? '+' : ''}{formatINRFull(margin)}
           </span>
-          <span className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold border w-fit ${marginBgClass}`}>
+          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border tabular-nums ${marginBgClass}`}>
             {isProfit ? <TrendingUp className="w-2.5 h-2.5" /> : isLoss ? <TrendingDown className="w-2.5 h-2.5" /> : null}
-            {isProfit ? '+' : ''}{pct.toFixed(1)}% Margin
+            {isProfit ? '+' : ''}{pct.toFixed(1)}%
           </span>
-        </VStack>
-      </td>
-
-      {/* Trip Dates */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <VStack space="2xs">
-          <span className="text-[11px] text-sky-400 font-semibold">{formatDate(booking.startDate)}</span>
-          <span className="text-[11px] text-sky-300/60">{formatDate(booking.endDate)}</span>
-        </VStack>
-      </td>
-
-      {/* Booking Status */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${
-          booking.status === 'Confirmed'
-            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-            : 'bg-rose-500/10 text-rose-400 border-rose-500/25'
-        }`}>
-          {booking.status || '—'}
-        </span>
-      </td>
-
-      {/* Trip Status */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${
-          tripStatusColors[booking.tripStatus] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'
-        }`}>
-          {booking.tripStatus || '—'}
-        </span>
+        </div>
       </td>
     </tr>
   );
@@ -333,14 +357,11 @@ function BookingRow({ booking, copiedId, onCopy }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const DEFAULT_FILTERS = {
-  bookingId: '',
   status: 'Confirmed',
-  createdBy: 'ALL',
   fromDate: '',
   toDate: '',
   serviceStartDate: '',
-  serviceEndDate: '',
-  phone: ''
+  serviceEndDate: ''
 };
 
 export default function ProfitMarginPage() {
@@ -354,37 +375,25 @@ export default function ProfitMarginPage() {
   const [summary, setSummary] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, totalPages: 1, total: 0 });
-  const [creators, setCreators] = useState([]);
 
   // UI state
   const [loading, setLoading] = useState(false);
-  const [creatorsLoading, setCreatorsLoading] = useState(true);
   const [hasFetched, setHasFetched] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const [sortBy, setSortBy] = useState({ field: 'createdAt', dir: 'desc' });
 
-  // ── Load creators dropdown ──
-  useEffect(() => {
-    setCreatorsLoading(true);
-    apiFetch('/transactions/booking-creators')
-      .then(data => setCreators(data.creators || []))
-      .catch(() => {})
-      .finally(() => setCreatorsLoading(false));
-  }, []);
+  const [activeScreenshot, setActiveScreenshot] = useState(null);
 
   // ── Fetch data ──
   const fetchData = useCallback(async (overrideFilters = null, viewAll = false) => {
     setLoading(true);
     const f = overrideFilters || filters;
     const params = new URLSearchParams();
-    if (f.bookingId.trim()) params.set('bookingId', f.bookingId.trim());
     if (f.status && f.status !== 'ALL') params.set('status', f.status);
-    if (f.createdBy && f.createdBy !== 'ALL') params.set('createdBy', f.createdBy);
     if (f.fromDate) params.set('fromDate', f.fromDate);
     if (f.toDate) params.set('toDate', f.toDate);
     if (f.serviceStartDate) params.set('serviceStartDate', f.serviceStartDate);
     if (f.serviceEndDate) params.set('serviceEndDate', f.serviceEndDate);
-    if (f.phone.trim()) params.set('phone', f.phone.trim());
     if (viewAll) params.set('viewAll', 'true');
     params.set('limit', '200');
 
@@ -424,10 +433,41 @@ export default function ProfitMarginPage() {
     return 0;
   });
 
+  // ── Flatten bookings into payment rows with all requested fields ──
+  const displayRows = useMemo(() => {
+    const list = [];
+    sortedBookings.forEach((b) => {
+      const payments = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments : [null];
+      payments.forEach((p, idx) => {
+        list.push({
+          bookingId: b.bookingId,
+          totalAmount: b.totalAmount,
+          paidAmount: b.paidAmount,
+          profitMargin: b.profitMargin,
+          marginPercentage: b.marginPercentage,
+          status: b.status,
+          // Payment details:
+          paymentId: p?.paymentId || (p?._id ? String(p._id).slice(-6) : '—'),
+          settlementChannel: p?.paymentMode || '—',
+          txnId: p?.invoiceNumber || p?.details || b.transactionId || '—',
+          screenshot: p?.attachment || '',
+          screenshotName: p?.attachmentName || '',
+          amount: p?.amountPaid != null ? p.amountPaid : (b.paidAmount || 0),
+          paymentDate: p?.paymentDate || b.createdAt,
+          paymentIndex: idx,
+          paymentTotal: payments.length,
+          rowKey: `${b.bookingId}-${p?.paymentId || p?._id || idx}`
+        });
+      });
+    });
+    return list;
+  }, [sortedBookings]);
+
   // ── Copy to clipboard ──
-  const handleCopy = useCallback((text) => {
+  const handleCopy = useCallback((text, id) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
-    setCopiedId(text);
+    setCopiedId(id || text);
     toast.success(`Copied: ${text}`, { id: 'copy', duration: 1500 });
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
@@ -465,23 +505,30 @@ export default function ProfitMarginPage() {
 
   // ── CSV Export ──
   const exportCSV = () => {
-    if (!sortedBookings.length) return;
-    const headers = ['Booking ID', 'Booking Date', 'Client Name', 'Package', 'Total (₹)', 'Paid (₹)', 'Due (₹)', 'Profit Margin (₹)', 'Margin %', 'Trip Start', 'Trip End', 'Booking Status', 'Trip Status', 'Created By'];
-    const rows = sortedBookings.map(b => [
-      b.bookingId,
-      formatDate(b.createdAt),
-      b.travellerName || '',
-      b.packageName || '',
-      b.totalAmount,
-      b.paidAmount,
-      b.dueAmount,
-      b.profitMargin,
-      Number(b.marginPercentage || 0).toFixed(2) + '%',
-      formatDate(b.startDate),
-      formatDate(b.endDate),
-      b.status || '',
-      b.tripStatus || '',
-      b.creatorName || ''
+    if (!displayRows.length) return;
+    const headers = [
+      'Booking ID',
+      'Payment ID',
+      'Settlement Channel',
+      'Txn ID',
+      'SS Link',
+      'Payment Amount (₹)',
+      'Payment Date',
+      'Total Package Amount (₹)',
+      'Margin (₹)',
+      'Margin %'
+    ];
+    const rows = displayRows.map(r => [
+      r.bookingId || '',
+      r.paymentId || '',
+      r.settlementChannel || '',
+      r.txnId || '',
+      r.screenshot || '',
+      r.amount || 0,
+      formatDate(r.paymentDate),
+      r.totalAmount || 0,
+      r.profitMargin || 0,
+      Number(r.marginPercentage || 0).toFixed(2) + '%'
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -503,32 +550,16 @@ export default function ProfitMarginPage() {
     {
       label: 'Total Package Cost',
       value: summary.totalPackageCost,
-      icon: FileText,
+      icon: Package,
       colorClass: 'text-orange-400',
       bgGlow: 'bg-orange-500',
       subtext: `Across ${summary.totalCount} booking${summary.totalCount !== 1 ? 's' : ''}`
     },
     {
-      label: 'Total Paid Amount',
-      value: summary.totalPaidAmount,
-      icon: RefreshCw,
-      colorClass: 'text-emerald-400',
-      bgGlow: 'bg-emerald-500',
-      subtext: 'Client payments collected'
-    },
-    {
-      label: 'Total Due Amount',
-      value: summary.totalDueAmount,
-      icon: AlertCircle,
-      colorClass: 'text-rose-400',
-      bgGlow: 'bg-rose-500',
-      subtext: 'Outstanding receivables'
-    },
-    {
-      label: 'Total Profit Margin',
+      label: 'Total Margin',
       value: summary.totalProfitMargin,
       icon: isOverallProfit ? TrendingUp : TrendingDown,
-      colorClass: isOverallProfit ? 'text-emerald-300' : 'text-rose-400',
+      colorClass: isOverallProfit ? 'text-emerald-400' : 'text-rose-400',
       bgGlow: isOverallProfit ? 'bg-emerald-500' : 'bg-rose-500',
       badge: {
         text: `${isOverallProfit ? '+' : ''}${overallPct.toFixed(1)}% Overall Margin`,
@@ -538,6 +569,14 @@ export default function ProfitMarginPage() {
           : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
       },
       subtext: 'Net profit after supplier B2B cost'
+    },
+    {
+      label: 'GST Amount',
+      value: summary.totalGstAmount || 0,
+      icon: BadgeIndianRupee,
+      colorClass: 'text-sky-400',
+      bgGlow: 'bg-sky-500',
+      subtext: 'Applicable tax & GST component'
     }
   ] : [];
 
@@ -591,20 +630,8 @@ export default function ProfitMarginPage() {
           <Text className="text-xs text-muted-foreground/60">(Fill any filter to search)</Text>
         </HStack>
 
-        {/* Row 1: Booking ID | Status | Created By */}
+        {/* Row 1: Booking Status | Booking Date From | Booking Date To */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking ID / Txn ID</label>
-            <input
-              id="filter-booking-id"
-              type="text"
-              value={pendingFilters.bookingId}
-              onChange={e => handleChange('bookingId', e.target.value)}
-              placeholder="FTXXXXXX or Txn / Ref ID"
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all font-mono"
-            />
-          </VStack>
-
           <VStack space="xs">
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Status</label>
             <select
@@ -619,25 +646,6 @@ export default function ProfitMarginPage() {
             </select>
           </VStack>
 
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Created By</label>
-            <select
-              id="filter-creator"
-              value={pendingFilters.createdBy}
-              onChange={e => handleChange('createdBy', e.target.value)}
-              disabled={creatorsLoading}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all cursor-pointer appearance-none disabled:opacity-50"
-            >
-              <option value="ALL">All Creators</option>
-              {creators.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </VStack>
-        </div>
-
-        {/* Row 2: From Date | To Date | Phone */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <VStack space="xs">
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Date (From)</label>
             <input
@@ -659,22 +667,10 @@ export default function ProfitMarginPage() {
               className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
             />
           </VStack>
-
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Phone Number</label>
-            <input
-              id="filter-phone"
-              type="text"
-              value={pendingFilters.phone}
-              onChange={e => handleChange('phone', e.target.value)}
-              placeholder="xxx-xxx-xxxx"
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all"
-            />
-          </VStack>
         </div>
 
-        {/* Row 3: Service Start | Service End */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+        {/* Row 2: Service Start Date | Service End Date */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
           <VStack space="xs">
             <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Service Start Date</label>
             <input
@@ -696,8 +692,6 @@ export default function ProfitMarginPage() {
               className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
             />
           </VStack>
-
-          <div /> {/* spacer */}
         </div>
 
         {/* Actions row */}
@@ -743,7 +737,7 @@ export default function ProfitMarginPage() {
 
       {/* ── KPI Summary Cards ── */}
       {hasFetched && summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {kpiCards.map((card) => (
             <KpiCard key={card.label} {...card} />
           ))}
@@ -793,27 +787,25 @@ export default function ProfitMarginPage() {
           )}
 
           {/* Table */}
-          {!loading && sortedBookings.length > 0 && (
+          {!loading && displayRows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full text-left min-w-[1100px]">
+              <table className="w-full text-left min-w-[980px]">
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/20">
                     {[
                       { label: 'Booking ID', field: 'bookingId' },
-                      { label: 'Booking Date', field: 'createdAt' },
-                      { label: 'Client Name', field: 'travellerName' },
-                      { label: 'Package Name', field: null },
-                      { label: 'Total', field: 'totalAmount', align: 'right' },
-                      { label: 'Paid', field: 'paidAmount', align: 'right' },
-                      { label: 'Due', field: 'dueAmount', align: 'right' },
-                      { label: 'Profit / Loss Margin', field: 'profitMargin' },
-                      { label: 'Trip Dates', field: 'startDate' },
-                      { label: 'Booking Status', field: null },
-                      { label: 'Trip Status', field: null },
+                      { label: 'Payment ID', field: 'paymentId' },
+                      { label: 'Settlement Channel', field: 'settlementChannel' },
+                      { label: 'Txn ID', field: 'txnId' },
+                      { label: 'Screenshot', field: null, align: 'center' },
+                      { label: 'Amount', field: 'amount', align: 'right' },
+                      { label: 'Payment Date', field: 'paymentDate' },
+                      { label: 'Total Package Amount', field: 'totalAmount', align: 'right' },
+                      { label: 'Margin', field: 'profitMargin', align: 'right' },
                     ].map(col => (
                       <th
                         key={col.label}
-                        className={`px-4 py-3 text-[10px] font-black uppercase tracking-widest text-muted-foreground/70 ${col.align === 'right' ? 'text-right' : ''}`}
+                        className={`px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground/70 whitespace-nowrap ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                       >
                         {col.field ? (
                           <SortHeader label={col.label} field={col.field} sortBy={sortBy} onSort={handleSort} />
@@ -825,12 +817,13 @@ export default function ProfitMarginPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedBookings.map((b, idx) => (
+                  {displayRows.map((row) => (
                     <BookingRow
-                      key={`${b.bookingId}-${idx}`}
-                      booking={b}
+                      key={row.rowKey}
+                      row={row}
                       copiedId={copiedId}
                       onCopy={handleCopy}
+                      onPreviewSS={(url, title) => setActiveScreenshot({ url, title })}
                     />
                   ))}
                 </tbody>
@@ -842,7 +835,7 @@ export default function ProfitMarginPage() {
           {!loading && pagination.total > pagination.limit && (
             <div className="px-5 py-3 border-t border-border/40 flex items-center justify-between">
               <Text className="text-xs text-muted-foreground/60">
-                Showing {sortedBookings.length} of {pagination.total} bookings
+                Showing {displayRows.length} payment records across {sortedBookings.length} bookings
               </Text>
               <Text className="text-xs text-muted-foreground/50">
                 Increase limit or apply filters to narrow results
@@ -867,6 +860,48 @@ export default function ProfitMarginPage() {
             </Text>
           </VStack>
         </Box>
+      )}
+
+      {/* ── Screenshot Preview Modal ── */}
+      {activeScreenshot && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setActiveScreenshot(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-card border border-border/80 rounded-2xl p-4 shadow-2xl overflow-hidden flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-3 mb-3 border-b border-border/60">
+              <span className="text-xs font-bold text-foreground truncate max-w-md">
+                {activeScreenshot.title || 'Payment Screenshot Proof'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveScreenshot(null)}
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img
+              src={activeScreenshot.url}
+              alt="Payment Screenshot Proof"
+              className="max-h-[72vh] w-auto object-contain rounded-lg shadow-md"
+            />
+            <div className="w-full flex justify-end gap-2 pt-3 mt-3 border-t border-border/60">
+              <a
+                href={activeScreenshot.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 transition-all cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Full Size</span>
+              </a>
+            </div>
+          </div>
+        </div>
       )}
     </Box>
   );

@@ -37,7 +37,8 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // Import booking database connection
 const { connectBookingDB, getBookingDB } = require('./src/config/bookingDb');

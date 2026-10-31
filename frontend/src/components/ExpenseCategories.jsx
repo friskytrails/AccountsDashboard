@@ -1,16 +1,12 @@
-import { Hotel, Car, Users, Camera, Briefcase, Megaphone, MoreHorizontal, Layers, Plus, TrendingDown, Building2, Wrench } from 'lucide-react';
+import { Briefcase, Megaphone, MoreHorizontal, Layers, Plus, FileText, Receipt } from 'lucide-react';
 import { Card, Box, Heading, Text, Badge, BadgeText, Progress, ProgressFilledTrack, VStack, HStack, Button, ButtonText, ButtonIcon } from '@/components/ui';
 
 const CATEGORY_MAP = {
-  SALARIES: { label: 'Salaries & Staff', icon: Briefcase, color: 'text-rose-400', bg: 'bg-rose-400', container: 'bg-rose-400/15 border-rose-400/30' },
-  SUPPLIERS: { label: 'Suppliers & Vendors', icon: Building2, color: 'text-sky-400', bg: 'bg-sky-400', container: 'bg-sky-400/15 border-sky-400/30' },
-  OPERATIONS: { label: 'Operations & Fleet', icon: Wrench, color: 'text-emerald-400', bg: 'bg-emerald-400', container: 'bg-emerald-400/15 border-emerald-400/30' },
-  HOTELS: { label: 'Hotels & Lodging', icon: Hotel, color: 'text-amber-400', bg: 'bg-amber-400', container: 'bg-amber-400/15 border-amber-400/30' },
-  TRANSPORT: { label: 'Transport & Fleet', icon: Car, color: 'text-sky-400', bg: 'bg-sky-400', container: 'bg-sky-400/15 border-sky-400/30' },
-  GUIDES: { label: 'Tour Guides', icon: Users, color: 'text-emerald-400', bg: 'bg-emerald-400', container: 'bg-emerald-400/15 border-emerald-400/30' },
-  SIGHTSEEING: { label: 'Sightseeing & Entry', icon: Camera, color: 'text-violet-400', bg: 'bg-violet-400', container: 'bg-violet-400/15 border-violet-400/30' },
-  MARKETING: { label: 'Marketing & Ads', icon: Megaphone, color: 'text-fuchsia-400', bg: 'bg-fuchsia-400', container: 'bg-fuchsia-400/15 border-fuchsia-400/30' },
-  OTHERS: { label: 'Miscellaneous', icon: MoreHorizontal, color: 'text-slate-400', bg: 'bg-slate-400', container: 'bg-slate-400/15 border-slate-400/30' },
+  STAFF_SALARIES: { label: 'Staff Salaries', icon: Briefcase, color: 'text-rose-400', bg: 'bg-rose-400', container: 'bg-rose-400/15 border-rose-400/30' },
+  SALARIES: { label: 'Staff Salaries', icon: Briefcase, color: 'text-rose-400', bg: 'bg-rose-400', container: 'bg-rose-400/15 border-rose-400/30' },
+  MARKETING: { label: 'Marketing and Ads', icon: Megaphone, color: 'text-fuchsia-400', bg: 'bg-fuchsia-400', container: 'bg-fuchsia-400/15 border-fuchsia-400/30' },
+  GST: { label: 'GST', icon: FileText, color: 'text-amber-400', bg: 'bg-amber-400', container: 'bg-amber-400/15 border-amber-400/30' },
+  OTHERS: { label: 'Others', icon: MoreHorizontal, color: 'text-slate-400', bg: 'bg-slate-400', container: 'bg-slate-400/15 border-slate-400/30' },
 };
 
 export default function ExpenseCategories({ categoryBreakdown = [], totalOutflow = 0, loading = false, onOpenAdd }) {
@@ -22,6 +18,11 @@ export default function ExpenseCategories({ categoryBreakdown = [], totalOutflow
     );
   }
 
+  const displayCategories = categoryBreakdown.filter(item => {
+    const cat = item.category?.toUpperCase();
+    return ['STAFF_SALARIES', 'SALARIES', 'MARKETING', 'GST', 'OTHERS'].includes(cat);
+  });
+
   return (
     <Card className="p-7 lg:p-8 rounded-xl flex flex-col justify-between h-full relative overflow-hidden glow-card bg-gradient-to-b from-card/95 to-card/75 border border-border/80 shadow-2xl">
       {/* Header */}
@@ -31,17 +32,17 @@ export default function ExpenseCategories({ categoryBreakdown = [], totalOutflow
             Expense Allocation
           </Heading>
           <Text size="sm" className="text-muted-foreground text-xs leading-relaxed">
-            Breakdown across operating categories
+            Staff Salaries, Marketing and Ads, Others, GST
           </Text>
         </VStack>
         <Badge variant={totalOutflow > 0 ? 'error' : 'muted'} size="md" className="py-1 px-3 border border-border/70 rounded-md">
-          <BadgeText className="font-mono text-xs font-bold">₹{Number(totalOutflow).toLocaleString('en-IN')}</BadgeText>
+          <BadgeText className="text-xs font-bold tabular-nums">₹{Number(totalOutflow).toLocaleString('en-IN')}</BadgeText>
         </Badge>
       </HStack>
 
       {/* Categories Content */}
       <VStack space="md" className="flex-1 overflow-y-auto pr-1 my-2 max-h-[380px]">
-        {categoryBreakdown.length === 0 ? (
+        {displayCategories.length === 0 ? (
           <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-xl">
             <Box className="w-14 h-14 rounded-md bg-muted/70 border border-border/70 flex items-center justify-center text-muted-foreground shadow-sm">
               <Layers className="w-7 h-7 stroke-[1.5]" />
@@ -67,7 +68,7 @@ export default function ExpenseCategories({ categoryBreakdown = [], totalOutflow
             )}
           </VStack>
         ) : (
-          categoryBreakdown.map((item) => {
+          displayCategories.map((item) => {
             const meta = CATEGORY_MAP[item.category] || CATEGORY_MAP.OTHERS;
             const Icon = meta.icon;
             const pct = item.percentage || 0;
@@ -82,10 +83,10 @@ export default function ExpenseCategories({ categoryBreakdown = [], totalOutflow
                     <Text size="sm" bold className="text-foreground font-semibold text-xs">{meta.label}</Text>
                   </HStack>
                   <HStack space="sm" className="items-center">
-                    <Text size="sm" bold className="text-foreground font-mono text-xs font-bold">
+                    <Text size="sm" bold className="text-foreground text-xs font-bold tabular-nums">
                       ₹{Number(item.amount).toLocaleString('en-IN')}
                     </Text>
-                    <Badge variant="muted" size="sm" className="py-0 px-1.5 font-mono text-[10px]">
+                    <Badge variant="muted" size="sm" className="py-0 px-1.5 text-[10px] tabular-nums font-semibold">
                       <BadgeText>{pct.toFixed(1)}%</BadgeText>
                     </Badge>
                   </HStack>

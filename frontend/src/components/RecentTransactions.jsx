@@ -14,7 +14,9 @@ import {
   MapPin,
   Phone,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ExternalLink,
+  Image as ImageIcon
 } from 'lucide-react';
 import {
   Card,
@@ -48,8 +50,8 @@ export default function RecentTransactions({
   loading = false
 }) {
   const navigate = useNavigate();
-  // Main view tab: 'MANUAL' | 'BOOKINGS' | 'SUPPLIERS'
-  const [activeTab, setActiveTab] = useState('MANUAL');
+  // Main view tab: 'INFLOW' | 'OUTFLOW'
+  const [activeTab, setActiveTab] = useState('INFLOW');
   const [filterType, setFilterType] = useState('ALL'); // For manual entries: 'ALL' | 'INFLOW' | 'OUTFLOW'
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -111,11 +113,9 @@ export default function RecentTransactions({
               <Heading size="xl" bold className="text-foreground tracking-tight text-xl font-bold">
                 Audit & Transaction Ledger
               </Heading>
-              <Badge variant="muted" size="md" className="border border-border/70 rounded-md">
-                <BadgeText className="font-mono text-xs">
-                  {activeTab === 'MANUAL'
-                    ? `${filteredManual.length} Journal Entries`
-                    : activeTab === 'BOOKINGS'
+                          <Badge variant="muted" size="md" className="border border-border/70 rounded-md">
+                <BadgeText className="text-xs font-semibold tabular-nums">
+                  {activeTab === 'INFLOW'
                     ? `${filteredBookings.length} Customer Inflows`
                     : `${filteredSuppliers.length} Supplier Outflows`}
                 </BadgeText>
@@ -153,30 +153,17 @@ export default function RecentTransactions({
         <HStack space="xs" className="p-1 bg-muted/60 border border-border/70 rounded-lg flex-wrap gap-1 mt-1">
           <button
             type="button"
-            onClick={() => { setActiveTab('MANUAL'); setSearchQuery(''); }}
+            onClick={() => { setActiveTab('INFLOW'); setSearchQuery(''); }}
             className={`flex items-center gap-2 py-1.5 px-3 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'MANUAL'
+              activeTab === 'INFLOW'
                 ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Manual Entries ({transactions.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setActiveTab('BOOKINGS'); setSearchQuery(''); }}
-            className={`flex items-center gap-2 py-1.5 px-3 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'BOOKINGS'
-                ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Customer Inflows ({liveInflows.length})</span>
+            <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Cash Inflow ({liveInflows.length})</span>
             {totalBookingSum > 0 && (
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] tabular-nums text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
                 +₹{totalBookingSum.toLocaleString('en-IN')}
               </span>
             )}
@@ -184,17 +171,17 @@ export default function RecentTransactions({
 
           <button
             type="button"
-            onClick={() => { setActiveTab('SUPPLIERS'); setSearchQuery(''); }}
+            onClick={() => { setActiveTab('OUTFLOW'); setSearchQuery(''); }}
             className={`flex items-center gap-2 py-1.5 px-3 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'SUPPLIERS'
+              activeTab === 'OUTFLOW'
                 ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <Building2 className="w-3.5 h-3.5 text-rose-400" />
-            <span>Supplier Outflows ({liveOutflows.length})</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-rose-400" />
+            <span>Cash Outflow ({liveOutflows.length})</span>
             {totalSupplierSum > 0 && (
-              <span className="text-[10px] font-mono text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] tabular-nums text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded">
                 -₹{totalSupplierSum.toLocaleString('en-IN')}
               </span>
             )}
@@ -241,11 +228,9 @@ export default function RecentTransactions({
               <InputIcon as={Search} className="w-3.5 h-3.5 text-muted-foreground ml-3" />
               <InputField
                 placeholder={
-                  activeTab === 'MANUAL'
-                    ? 'Search narration, ref, txn ID...'
-                    : activeTab === 'BOOKINGS'
+                  activeTab === 'INFLOW'
                     ? 'Search traveller, booking ID, txn ID...'
-                    : 'Search supplier, city, ID...'
+                    : 'Search booking ID, payment ID, category...'
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -264,113 +249,8 @@ export default function RecentTransactions({
               Synchronizing corporate journal entries...
             </Text>
           </Box>
-        ) : activeTab === 'MANUAL' ? (
-          /* TAB 1: MANUAL JOURNAL ENTRIES */
-          filteredManual.length === 0 ? (
-            <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-2xl">
-              <Box className="w-12 h-12 rounded-xl bg-muted/70 flex items-center justify-center text-muted-foreground border border-border/70 shadow-sm">
-                <Receipt className="w-6 h-6 stroke-[1.5]" />
-              </Box>
-              <VStack space="2xs" className="max-w-sm">
-                <Text size="sm" bold className="text-foreground font-semibold">
-                  No Manual Entries Found
-                </Text>
-                <Text size="xs" className="text-muted-foreground leading-relaxed">
-                  {searchQuery
-                    ? `No manual transactions match "${searchQuery}".`
-                    : 'No manual cash inflows or expense disbursements logged for this billing period.'}
-                </Text>
-              </VStack>
-              {!searchQuery && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onOpenAdd}
-                  className="mt-1 gap-2 border-border/80 hover:border-primary/50"
-                >
-                  <ButtonIcon as={Plus} className="w-4 h-4" />
-                  <ButtonText className="text-xs font-semibold">Record First Entry</ButtonText>
-                </Button>
-              )}
-            </VStack>
-          ) : (
-            filteredManual.map((tx) => {
-              const isInflow = tx.type === 'INFLOW';
-              return (
-                <HStack
-                  key={tx._id}
-                  space="md"
-                  className="justify-between items-center p-3.5 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all group hover:border-border/80"
-                >
-                  <HStack space="md" className="min-w-0 items-center flex-1">
-                    <Box
-                      className={`w-10 h-10 rounded-md flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
-                        isInflow
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-md shadow-emerald-500/10'
-                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-md shadow-rose-500/10'
-                      }`}
-                    >
-                      {isInflow ? <ArrowDownLeft className="w-5 h-5 stroke-[2.2]" /> : <ArrowUpRight className="w-5 h-5 stroke-[2.2]" />}
-                    </Box>
-
-                    <VStack space="2xs" className="min-w-0 flex-1">
-                      <HStack space="sm" className="items-center">
-                        <Text size="sm" bold isTruncated className="text-foreground font-semibold text-xs truncate">
-                          {tx.description || tx.category}
-                        </Text>
-                        <Badge
-                          variant={isInflow ? 'success' : 'muted'}
-                          size="sm"
-                          className="py-0 px-2 font-mono text-[10px]"
-                        >
-                          <BadgeText>{tx.category}</BadgeText>
-                        </Badge>
-                      </HStack>
-
-                      <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2">
-                        <Text size="2xs" className="text-muted-foreground font-mono">{formatDate(tx.date)}</Text>
-                        <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                        <HStack space="xs" className="items-center">
-                          <CreditCard className="w-3 h-3 text-muted-foreground" />
-                          <Text size="2xs" className="font-mono text-muted-foreground uppercase text-[10px]">{tx.paymentMode}</Text>
-                        </HStack>
-                        {tx.referenceNumber && (
-                          <>
-                            <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                            <Text size="2xs" className="text-muted-foreground font-mono text-[10px]">
-                              Ref: {tx.referenceNumber}
-                            </Text>
-                          </>
-                        )}
-                      </HStack>
-                    </VStack>
-                  </HStack>
-
-                  <HStack space="md" className="items-center pl-4">
-                    <Text
-                      size="md"
-                      bold
-                      className={`font-mono text-base font-bold ${isInflow ? 'text-emerald-400' : 'text-rose-400'}`}
-                    >
-                      {isInflow ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
-                    </Text>
-
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => onDelete(tx._id)}
-                      title="Delete record"
-                      className="h-7 w-7 text-muted-foreground/60 hover:text-destructive hover:bg-destructive/15 rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </HStack>
-                </HStack>
-              );
-            })
-          )
-        ) : activeTab === 'BOOKINGS' ? (
-          /* TAB 2: LIVE CUSTOMER INFLOWS */
+        ) : activeTab === 'INFLOW' ? (
+          /* TAB 1: LIVE CUSTOMER INFLOWS */
           filteredBookings.length === 0 ? (
             <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-2xl">
               <Box className="w-12 h-12 rounded-xl bg-muted/70 flex items-center justify-center text-muted-foreground border border-border/70 shadow-sm">
@@ -388,70 +268,91 @@ export default function RecentTransactions({
               </VStack>
             </VStack>
           ) : (
-            filteredBookings.map((b) => (
-              <HStack
-                key={b._id || b.paymentId}
-                space="md"
-                className="justify-between items-center p-3.5 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all group hover:border-border/80"
-              >
-                <HStack space="md" className="min-w-0 items-center flex-1">
-                  <Box className="w-10 h-10 rounded-md flex items-center justify-center shrink-0 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-md shadow-emerald-500/10">
-                    <ArrowDownLeft className="w-5 h-5 stroke-[2.2]" />
-                  </Box>
+            filteredBookings.map((b) => {
+              const bmsUrl = b.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${b.bookingId}` : null;
+              const txnId = b.bookingTransactionId || b.paymentId || '—';
 
-                  <VStack space="2xs" className="min-w-0 flex-1">
-                    <HStack space="sm" className="items-center">
-                      <Text size="sm" bold isTruncated className="text-foreground font-semibold text-xs">
-                        {b.travellerName || 'Valued Guest'}
-                      </Text>
-                      <Badge variant="success" size="sm" className="py-0 px-2 font-mono text-[10px]">
-                        <BadgeText>{b.bookingId || 'BOOKING'}</BadgeText>
-                      </Badge>
-                      {b.location && (
-                        <Text size="2xs" className="text-muted-foreground truncate hidden sm:inline">
-                          • {b.location}
-                        </Text>
-                      )}
-                    </HStack>
+              return (
+                <HStack
+                  key={b._id || b.paymentId}
+                  space="md"
+                  className="justify-between items-center p-3 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all group hover:border-border/80"
+                >
+                  <HStack space="md" className="min-w-0 items-center flex-1">
+                    <Box className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm">
+                      <ArrowDownLeft className="w-4 h-4 stroke-[2.2]" />
+                    </Box>
 
-                    <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2">
-                      <Text size="2xs" className="text-muted-foreground font-mono">{formatDate(b.paymentDate)}</Text>
-                      <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                      <HStack space="xs" className="items-center">
-                        <CreditCard className="w-3 h-3 text-muted-foreground" />
-                        <Text size="2xs" className="font-mono text-muted-foreground uppercase text-[10px]">{b.paymentMode || 'PAYMENT'}</Text>
+                    <VStack space="2xs" className="min-w-0 flex-1">
+                      <HStack space="sm" className="items-center flex-wrap">
+                        {bmsUrl ? (
+                          <a
+                            href={bmsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all group/bms"
+                            title={`Open ${b.bookingId} in BMS`}
+                          >
+                            <span>{b.bookingId}</span>
+                            <ExternalLink className="w-3 h-3 transition-transform group-hover/bms:translate-x-0.5 group-hover/bms:-translate-y-0.5" />
+                          </a>
+                        ) : (
+                          <Badge variant="success" size="sm" className="py-0 px-2 text-[10px] font-semibold">
+                            <BadgeText>NO_ID</BadgeText>
+                          </Badge>
+                        )}
+
+                        <Badge variant="outline" size="sm" className="py-0 px-1.5 text-[10px] text-foreground font-semibold">
+                          <BadgeText>{b.paymentMode || 'Kalpana BOI'}</BadgeText>
+                        </Badge>
                       </HStack>
-                      {b.paymentId && (
-                        <>
-                          <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                          <Text size="2xs" className="text-muted-foreground font-mono text-[10px]">Txn ID: {b.paymentId}</Text>
-                        </>
-                      )}
-                      {b.addedBy && (
-                        <>
-                          <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                          <Text size="2xs" className="text-muted-foreground text-[10px]">Agent: {b.addedBy}</Text>
-                        </>
-                      )}
-                    </HStack>
-                  </VStack>
-                </HStack>
 
-                <HStack space="md" className="items-center pl-4">
-                  <Text size="md" bold className="font-mono text-base font-bold text-emerald-400">
-                    +₹{Number(b.amountPaid).toLocaleString('en-IN')}
-                  </Text>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" title="Verified in Booking System" />
+                      <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2 pt-0.5">
+                        <Text size="2xs" className="text-muted-foreground tabular-nums">{formatDate(b.paymentDate)}</Text>
+                        <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                        <Text size="2xs" className="text-muted-foreground tabular-nums text-[10px]">Pay ID: {b.paymentId || '—'}</Text>
+                        <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                        <Text size="2xs" className="text-muted-foreground tabular-nums text-[10px]">Txn ID: {txnId}</Text>
+
+                        {b.attachment ? (
+                          <>
+                            <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                            <a
+                              href={b.attachment}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-emerald-400 font-bold hover:underline inline-flex items-center gap-1"
+                            >
+                              <ImageIcon className="w-3 h-3" />
+                              <span>View SS</span>
+                            </a>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                            <span className="text-[10px] text-muted-foreground/50 italic">No SS</span>
+                          </>
+                        )}
+                      </HStack>
+                    </VStack>
+                  </HStack>
+
+                  <HStack space="md" className="items-center pl-3">
+                    <Text size="md" bold className="tabular-nums text-sm sm:text-base font-bold text-emerald-400">
+                      +₹{Number(b.amountPaid).toLocaleString('en-IN')}
+                    </Text>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 hidden sm:inline" title="Verified in Booking System" />
+                  </HStack>
                 </HStack>
-              </HStack>
-            ))
+              );
+            })
           )
         ) : (
-          /* TAB 3: LIVE SUPPLIER OUTFLOWS */
+          /* TAB 2: LIVE SUPPLIER OUTFLOWS — strictly 7 fields */
           filteredSuppliers.length === 0 ? (
             <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-2xl">
               <Box className="w-12 h-12 rounded-xl bg-muted/70 flex items-center justify-center text-muted-foreground border border-border/70 shadow-sm">
-                <Building2 className="w-6 h-6 stroke-[1.5]" />
+                <ArrowUpRight className="w-6 h-6 stroke-[1.5]" />
               </Box>
               <VStack space="2xs" className="max-w-sm">
                 <Text size="sm" bold className="text-foreground font-semibold">
@@ -459,69 +360,87 @@ export default function RecentTransactions({
                 </Text>
                 <Text size="xs" className="text-muted-foreground leading-relaxed">
                   {searchQuery
-                    ? `No suppliers match "${searchQuery}".`
-                    : 'No supplier payouts registered in ft_booking_system for this period.'}
+                    ? `No outflows match "${searchQuery}".`
+                    : 'No supplier payouts registered for this period.'}
                 </Text>
               </VStack>
             </VStack>
           ) : (
-            filteredSuppliers.map((s) => (
-              <HStack
-                key={s._id || s.supplierId}
-                space="md"
-                className="justify-between items-center p-3.5 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all group hover:border-border/80"
-              >
-                <HStack space="md" className="min-w-0 items-center flex-1">
-                  <Box className="w-10 h-10 rounded-md flex items-center justify-center shrink-0 bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-md shadow-rose-500/10">
-                    <ArrowUpRight className="w-5 h-5 stroke-[2.2]" />
-                  </Box>
+            filteredSuppliers.map((s) => {
+              const bmsUrl = s.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${s.bookingId}` : null;
+              return (
+                <HStack
+                  key={s._id || s.supplierId}
+                  space="md"
+                  className="justify-between items-center p-3.5 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all hover:border-border/80"
+                >
+                  <HStack space="md" className="min-w-0 items-start flex-1">
+                    <Box className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-sm mt-0.5">
+                      <ArrowUpRight className="w-4 h-4 stroke-[2.2]" />
+                    </Box>
 
-                  <VStack space="2xs" className="min-w-0 flex-1">
-                    <HStack space="sm" className="items-center">
-                      <Text size="sm" bold isTruncated className="text-foreground font-semibold text-xs">
-                        {s.supplierName}
-                      </Text>
-                      <Badge variant="error" size="sm" className="py-0 px-2 font-mono text-[10px]">
-                        <BadgeText>{s.category}</BadgeText>
-                      </Badge>
-                      {s.city && (
-                        <HStack space="2xs" className="items-center text-muted-foreground hidden sm:flex">
-                          <MapPin className="w-3 h-3 text-muted-foreground" />
-                          <Text size="2xs" className="text-muted-foreground text-[10px]">
-                            {s.city}{s.state ? `, ${s.state}` : ''}
-                          </Text>
-                        </HStack>
-                      )}
-                    </HStack>
+                    <VStack space="2xs" className="min-w-0 flex-1">
+                      {/* Row 1: Booking ID + Category */}
+                      <HStack space="sm" className="items-center flex-wrap">
+                        {bmsUrl ? (
+                          <a
+                            href={bmsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all"
+                            title={`Open ${s.bookingId} in BMS`}
+                          >
+                            <span>{s.bookingId}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">—</span>
+                        )}
+                        <Badge variant="error" size="sm" className="py-0 px-2 text-[10px] font-semibold">
+                          <BadgeText>{s.category || 'OTHERS'}</BadgeText>
+                        </Badge>
+                      </HStack>
 
-                    <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2">
-                      <Text size="2xs" className="text-muted-foreground font-mono">{formatDate(s.date)}</Text>
-                      {s.contactPerson && s.contactPerson !== s.supplierName && (
-                        <>
-                          <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                          <Text size="2xs" className="text-muted-foreground text-[10px]">POC: {s.contactPerson}</Text>
-                        </>
-                      )}
-                      {s.supplierId && (
-                        <>
-                          <Text size="2xs" className="text-muted-foreground/60">•</Text>
-                          <Text size="2xs" className="text-muted-foreground font-mono text-[10px]">ID: {s.supplierId}</Text>
-                        </>
-                      )}
-                    </HStack>
-                  </VStack>
+                      {/* Row 2: Payment ID, Date, Account, SS */}
+                      <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2 pt-0.5">
+                        <Text size="2xs" className="text-muted-foreground tabular-nums text-[10px]">Pay ID: {s.paymentId || '—'}</Text>
+                        <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                        <Text size="2xs" className="text-muted-foreground tabular-nums">{formatDate(s.date)}</Text>
+                        <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground border border-border/60 font-medium">
+                          {s.paymentMode || 'Account'}
+                        </span>
+                        {s.attachment ? (
+                          <>
+                            <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                            <a
+                              href={s.attachment}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] text-emerald-400 font-bold hover:underline inline-flex items-center gap-1"
+                            >
+                              <ImageIcon className="w-3 h-3" />
+                              <span>SS</span>
+                            </a>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="2xs" className="text-muted-foreground/60">•</Text>
+                            <span className="text-[10px] text-muted-foreground/50 italic">No SS</span>
+                          </>
+                        )}
+                      </HStack>
+                    </VStack>
+                  </HStack>
+
+                  <HStack space="md" className="items-center pl-3 shrink-0">
+                    <Text size="md" bold className="tabular-nums text-sm font-bold text-rose-400">
+                      -₹{Number(s.amount).toLocaleString('en-IN')}
+                    </Text>
+                  </HStack>
                 </HStack>
-
-                <HStack space="md" className="items-center pl-4">
-                  <Text size="md" bold className="font-mono text-base font-bold text-rose-400">
-                    -₹{Number(s.amount).toLocaleString('en-IN')}
-                  </Text>
-                  <Badge variant="muted" size="sm" className="py-0.5 px-1.5 text-[10px]">
-                    <BadgeText>{s.status || 'Active'}</BadgeText>
-                  </Badge>
-                </HStack>
-              </HStack>
-            ))
+              );
+            })
           )
         )}
       </VStack>
@@ -531,17 +450,13 @@ export default function RecentTransactions({
         <HStack space="xs" className="items-center">
           <ShieldCheck className="w-3.5 h-3.5 text-primary" />
           <Text size="xs" className="text-muted-foreground text-[11px]">
-            {activeTab === 'MANUAL'
-              ? 'Local journal entry records'
-              : activeTab === 'BOOKINGS'
+            {activeTab === 'INFLOW'
               ? 'Synchronized live from ft_booking_system.bookings'
               : 'Synchronized live from ft_booking_system.suppliers'}
           </Text>
         </HStack>
-        <Text size="xs" className="text-muted-foreground font-mono text-[11px]">
-          {activeTab === 'MANUAL'
-            ? `Showing ${filteredManual.length} of ${transactions.length}`
-            : activeTab === 'BOOKINGS'
+        <Text size="xs" className="text-muted-foreground tabular-nums text-[11px]">
+          {activeTab === 'INFLOW'
             ? `Showing ${filteredBookings.length} of ${liveInflows.length}`
             : `Showing ${filteredSuppliers.length} of ${liveOutflows.length}`}
         </Text>
