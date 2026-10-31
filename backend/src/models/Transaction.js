@@ -8,8 +8,22 @@ const TransactionSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'MARKETING', 'OTHERS'],
+    enum: [
+      'STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST',
+      'SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'ADVENTURE',
+      'TRAVELLER_TO_COMPANY', 'SUPPLIER_TO_COMPANY', 'COMPANY_TO_SUPPLIER', 'COMPANY_TO_TRAVELLER'
+    ],
     required: true
+  },
+  flowDirection: {
+    type: String,
+    enum: [
+      'TRAVELLER_TO_COMPANY',
+      'SUPPLIER_TO_COMPANY',
+      'COMPANY_TO_SUPPLIER',
+      'COMPANY_TO_TRAVELLER'
+    ],
+    default: 'TRAVELLER_TO_COMPANY'
   },
   amount: {
     type: Number,
@@ -29,22 +43,18 @@ const TransactionSchema = new mongoose.Schema({
       'Babita AU',
       'Hari Mohan BOB',
       'FT HDFC',
-      'Pratyush SBI',
-      'Cash',
-      'Other',
-      'UPI',
-      'BANK_TRANSFER',
-      'CASH',
-      'CARD',
-      'CHEQUE',
-      'OTHER',
-      'Supplier'
+      'Pratyush SBI'
     ],
-    default: 'Kalpana BOI'
+    default: 'Kalpana BOI',
+    required: true
   },
   referenceNumber: {
     type: String,
     trim: true,
+    default: ''
+  },
+  screenshot: {
+    type: String,
     default: ''
   },
   date: {

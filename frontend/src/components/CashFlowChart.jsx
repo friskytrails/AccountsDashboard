@@ -89,7 +89,7 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
               </Heading>
               <Badge variant="info" size="md" className="gap-1.5 py-1 px-3 rounded-md">
                 <BadgeIcon as={Activity} className="w-3.5 h-3.5 text-primary" />
-                <BadgeText className="text-xs font-mono font-bold">{activeDays.length} Active Payment Days</BadgeText>
+                <BadgeText className="text-xs font-semibold">{activeDays.length} Active Payment Days</BadgeText>
               </Badge>
             </HStack>
           </VStack>
@@ -124,7 +124,7 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
             <HStack space="xs" className="items-center bg-muted/40 px-3.5 py-1.5 rounded-md border border-border/60">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
               <Text size="xs" className="text-muted-foreground">Peak Inflow:</Text>
-              <Text size="xs" bold className="text-primary font-mono font-bold">
+              <Text size="xs" bold className="text-primary tabular-nums font-semibold">
                 ₹{Number(peakDayObj.inflow || 0).toLocaleString('en-IN')} (Day {peakDayObj.day})
               </Text>
             </HStack>
@@ -191,7 +191,7 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
                 x={paddingLeft - 12}
                 y={line.y + 4}
                 textAnchor="end"
-                className="text-[11px] fill-muted-foreground/80 font-mono font-medium"
+                className="text-[11px] fill-muted-foreground/80 font-medium"
               >
                 {formatYLabel(line.val)}
               </text>
@@ -332,7 +332,7 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
                   x={x}
                   y={svgHeight - 12}
                   textAnchor="middle"
-                  className="text-[11px] fill-muted-foreground/80 font-mono font-medium"
+                  className="text-[11px] fill-muted-foreground/80 font-medium"
                 >
                   Day {String(d.day).padStart(2, '0')}
                 </text>
@@ -348,7 +348,7 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
         <Card className="mt-5 p-4 bg-card/95 border border-primary/30 rounded-2xl flex items-center justify-between text-xs animate-in fade-in shadow-2xl">
           <HStack space="md" className="items-center">
             <Badge variant="info" size="md" className="py-1 px-3">
-              <BadgeText className="font-mono font-bold text-xs">Day {hoveredDay.day}</BadgeText>
+              <BadgeText className="font-semibold text-xs">Day {hoveredDay.day}</BadgeText>
             </Badge>
             <Text size="sm" bold className="text-foreground font-semibold">
               Daily Settlement Detail
@@ -358,19 +358,19 @@ export default function CashFlowChart({ dailyTrend = [], loading = false }) {
           <HStack space="xl" className="items-center">
             <HStack space="sm" className="items-center">
               <Text size="xs" className="text-muted-foreground">Booking Inflows:</Text>
-              <Text size="sm" bold className="text-primary font-mono text-sm">
+              <Text size="sm" bold className="text-primary tabular-nums text-sm font-semibold">
                 ₹{Number(hoveredDay.inflow || 0).toLocaleString('en-IN')}
               </Text>
             </HStack>
             <HStack space="sm" className="items-center">
               <Text size="xs" className="text-muted-foreground">Operational Outflows:</Text>
-              <Text size="sm" bold className="text-destructive font-mono text-sm">
+              <Text size="sm" bold className="text-destructive tabular-nums text-sm font-semibold">
                 ₹{Number(hoveredDay.outflow || 0).toLocaleString('en-IN')}
               </Text>
             </HStack>
             <HStack space="sm" className="items-center pl-3 border-l border-border/50">
               <Text size="xs" className="text-muted-foreground">Net Velocity:</Text>
-              <Text size="sm" bold className="text-foreground font-mono text-sm">
+              <Text size="sm" bold className="text-foreground tabular-nums text-sm font-semibold">
                 ₹{Number(hoveredDay.net || 0).toLocaleString('en-IN')}
               </Text>
             </HStack>
