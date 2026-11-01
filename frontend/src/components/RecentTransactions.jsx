@@ -269,7 +269,7 @@ export default function RecentTransactions({
             </VStack>
           ) : (
             filteredBookings.map((b) => {
-              const bmsUrl = b.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${b.bookingId}` : null;
+              const bmsUrl = b.bookingId ? `https://friskytrails-bms.vercel.app/booking/${b.bookingId}` : null;
               const txnId = b.bookingTransactionId || b.paymentId || '—';
 
               return (
@@ -367,7 +367,7 @@ export default function RecentTransactions({
             </VStack>
           ) : (
             filteredSuppliers.map((s) => {
-              const bmsUrl = s.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${s.bookingId}` : null;
+              const bmsUrl = s.bookingId ? `https://friskytrails-bms.vercel.app/booking/${s.bookingId}` : null;
               return (
                 <HStack
                   key={s._id || s.supplierId}

@@ -3,7 +3,7 @@ const { getBookingDB } = require('../config/bookingDb');
 
 const VALID_CATEGORIES = [
   'STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST',
-  'SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'ADVENTURE',
+  'SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'ADVENTURE', 'OUTSOURCED',
   'TRAVELLER_TO_COMPANY', 'SUPPLIER_TO_COMPANY', 'COMPANY_TO_SUPPLIER', 'COMPANY_TO_TRAVELLER'
 ];
 const VALID_PAYMENT_MODES = [
@@ -256,6 +256,7 @@ async function getLiveOutflows(req, res) {
         else if (typeStr.includes('adventure')) cat = 'ADVENTURE';
         else if (typeStr.includes('sightseeing') || typeStr.includes('sight')) cat = 'SIGHTSEEING';
         else if (typeStr.includes('guide')) cat = 'GUIDES';
+        else if (typeStr.includes('outsourced')) cat = 'OUTSOURCED';
         else cat = s.category.toUpperCase();
       }
 

@@ -198,7 +198,7 @@ function BookingRow({ row, copiedId, onCopy, onPreviewSS }) {
   const isProfit = margin > 0;
   const isLoss = margin < 0;
   const pct = Number(row.marginPercentage) || 0;
-  const bmsUrl = row.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${row.bookingId}` : null;
+  const bmsUrl = row.bookingId ? `https://friskytrails-bms.vercel.app/booking/${row.bookingId}` : null;
 
   const marginColorClass = isProfit
     ? 'text-emerald-400'

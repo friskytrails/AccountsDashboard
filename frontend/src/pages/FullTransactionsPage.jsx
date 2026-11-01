@@ -681,7 +681,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                     const id = b._id || b.paymentId;
                     const isExpanded = expandedIds.has(id);
                     const channel = normalizeMode(b.paymentMode);
-                    const bmsUrl = b.bookingId ? `https://friskytrails-bms-op.vercel.app/id/${b.bookingId}` : null;
+                    const bmsUrl = b.bookingId ? `https://friskytrails-bms.vercel.app/booking/${b.bookingId}` : null;
 
                     return (
                       <tr
@@ -866,7 +866,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           {row.bookingId !== '—' ? (
                             <a
-                              href={`https://friskytrails-bms-op.vercel.app/id/${row.bookingId}`}
+                              href={`https://friskytrails-bms.vercel.app/booking/${row.bookingId}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all"

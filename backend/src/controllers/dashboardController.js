@@ -237,6 +237,8 @@ async function getManualFlows(startDate, endDate, account = null) {
         else if (rawCat.includes('HOTEL')) cat = 'HOTELS';
         else if (rawCat.includes('TRANSPORT')) cat = 'TRANSPORT';
         else if (rawCat.includes('ADVENTURE')) cat = 'ADVENTURE';
+        else if (rawCat.includes('GUIDE')) cat = 'GUIDES';
+        else if (rawCat.includes('OUTSOURCED')) cat = 'OUTSOURCED';
         else if (rawCat.includes('SIGHTSEEING') || rawCat.includes('SIGHT')) cat = 'SIGHTSEEING';
         else cat = 'OTHERS';
 
