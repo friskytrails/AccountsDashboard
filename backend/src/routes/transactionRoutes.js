@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getTransactions,
+  getTransactionScreenshot,
   getLiveInflows,
   getLiveOutflows,
   addTransaction,
@@ -14,6 +15,7 @@ const { requireAuth } = require('../middleware/authMiddleware');
 
 // Routes mounted at /api/transactions
 router.get('/', requireAuth, getTransactions);
+router.get('/:id/screenshot', requireAuth, getTransactionScreenshot);
 router.get('/live-inflows', requireAuth, getLiveInflows);
 router.get('/live-outflows', requireAuth, getLiveOutflows);
 router.get('/profit-margins', requireAuth, getBookingMargins);

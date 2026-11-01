@@ -100,6 +100,39 @@ export default function RecentTransactions({
     return name.includes(q) || contact.includes(q) || cat.includes(q) || city.includes(q) || id.includes(q) || sId.includes(q) || sBooking.includes(q) || sService.includes(q);
   });
 
+  const manualInflows = filteredManual.filter((t) => t.type === 'INFLOW');
+  const manualOutflows = filteredManual.filter((t) => t.type === 'OUTFLOW');
+
+  const renderManualTransaction = (transaction) => {
+    const isInflow = transaction.type === 'INFLOW';
+    return (
+      <HStack key={transaction._id} space="md" className="justify-between items-center p-3 bg-muted/30 hover:bg-muted/60 border border-border/50 rounded-lg transition-all group hover:border-border/80">
+        <HStack space="md" className="min-w-0 items-center flex-1">
+          <Box className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 border shadow-sm ${isInflow ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'}`}>
+            {isInflow ? <ArrowDownLeft className="w-4 h-4 stroke-[2.2]" /> : <ArrowUpRight className="w-4 h-4 stroke-[2.2]" />}
+          </Box>
+          <VStack space="2xs" className="min-w-0 flex-1">
+            <HStack space="sm" className="items-center flex-wrap">
+              <Badge variant={isInflow ? 'success' : 'error'} size="sm" className="py-0 px-2 text-[10px] font-semibold"><BadgeText>{transaction.category || 'OTHERS'}</BadgeText></Badge>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground border border-border/60 font-medium">{transaction.paymentMode || 'Account'}</span>
+            </HStack>
+            <HStack space="md" className="items-center text-xs text-muted-foreground flex-wrap gap-2 pt-0.5">
+              <Text size="2xs" className="text-muted-foreground tabular-nums">{formatDate(transaction.date)}</Text>
+              {transaction.referenceNumber && <Text size="2xs" className="text-muted-foreground tabular-nums text-[10px]">Ref: {transaction.referenceNumber}</Text>}
+              {transaction.description && <Text size="2xs" className="text-muted-foreground truncate">{transaction.description}</Text>}
+            </HStack>
+          </VStack>
+        </HStack>
+        <HStack space="sm" className="items-center pl-3 shrink-0">
+          <Text size="md" bold className={`tabular-nums text-sm font-bold ${isInflow ? 'text-emerald-400' : 'text-rose-400'}`}>{isInflow ? '+' : '-'}₹{Number(transaction.amount).toLocaleString('en-IN')}</Text>
+          <button type="button" onClick={() => onDelete?.(transaction._id)} className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Delete manual transaction">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </HStack>
+      </HStack>
+    );
+  };
+
   const totalBookingSum = liveInflows.reduce((acc, curr) => acc + Number(curr.amountPaid || 0), 0);
   const totalSupplierSum = liveOutflows.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
@@ -116,8 +149,8 @@ export default function RecentTransactions({
                           <Badge variant="muted" size="md" className="border border-border/70 rounded-md">
                 <BadgeText className="text-xs font-semibold tabular-nums">
                   {activeTab === 'INFLOW'
-                    ? `${filteredBookings.length} Customer Inflows`
-                    : `${filteredSuppliers.length} Supplier Outflows`}
+                    ? `${filteredBookings.length + manualInflows.length} Customer Inflows`
+                    : `${filteredSuppliers.length + manualOutflows.length} Supplier Outflows`}
                 </BadgeText>
               </Badge>
             </HStack>
@@ -161,7 +194,7 @@ export default function RecentTransactions({
             }`}
           >
             <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Cash Inflow ({liveInflows.length})</span>
+            <span>Cash Inflow ({liveInflows.length + manualInflows.length})</span>
             {totalBookingSum > 0 && (
               <span className="text-[10px] tabular-nums text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
                 +₹{totalBookingSum.toLocaleString('en-IN')}
@@ -179,7 +212,7 @@ export default function RecentTransactions({
             }`}
           >
             <ArrowUpRight className="w-3.5 h-3.5 text-rose-400" />
-            <span>Cash Outflow ({liveOutflows.length})</span>
+            <span>Cash Outflow ({liveOutflows.length + manualOutflows.length})</span>
             {totalSupplierSum > 0 && (
               <span className="text-[10px] tabular-nums text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded">
                 -₹{totalSupplierSum.toLocaleString('en-IN')}
@@ -251,7 +284,7 @@ export default function RecentTransactions({
           </Box>
         ) : activeTab === 'INFLOW' ? (
           /* TAB 1: LIVE CUSTOMER INFLOWS */
-          filteredBookings.length === 0 ? (
+          filteredBookings.length + manualInflows.length === 0 ? (
             <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-2xl">
               <Box className="w-12 h-12 rounded-xl bg-muted/70 flex items-center justify-center text-muted-foreground border border-border/70 shadow-sm">
                 <Users className="w-6 h-6 stroke-[1.5]" />
@@ -268,7 +301,8 @@ export default function RecentTransactions({
               </VStack>
             </VStack>
           ) : (
-            filteredBookings.map((b) => {
+            <>
+            {filteredBookings.map((b) => {
               const bmsUrl = b.bookingId ? `https://friskytrails-bms.vercel.app/booking/${b.bookingId}` : null;
               const txnId = b.bookingTransactionId || b.paymentId || '—';
 
@@ -345,11 +379,13 @@ export default function RecentTransactions({
                   </HStack>
                 </HStack>
               );
-            })
+            })}
+            {manualInflows.map(renderManualTransaction)}
+            </>
           )
         ) : (
           /* TAB 2: LIVE SUPPLIER OUTFLOWS — strictly 7 fields */
-          filteredSuppliers.length === 0 ? (
+          filteredSuppliers.length + manualOutflows.length === 0 ? (
             <VStack space="md" className="h-64 items-center justify-center text-center p-8 bg-muted/20 border border-border/40 rounded-2xl">
               <Box className="w-12 h-12 rounded-xl bg-muted/70 flex items-center justify-center text-muted-foreground border border-border/70 shadow-sm">
                 <ArrowUpRight className="w-6 h-6 stroke-[1.5]" />
@@ -366,7 +402,8 @@ export default function RecentTransactions({
               </VStack>
             </VStack>
           ) : (
-            filteredSuppliers.map((s) => {
+            <>
+            {filteredSuppliers.map((s) => {
               const bmsUrl = s.bookingId ? `https://friskytrails-bms.vercel.app/booking/${s.bookingId}` : null;
               return (
                 <HStack
@@ -440,7 +477,9 @@ export default function RecentTransactions({
                   </HStack>
                 </HStack>
               );
-            })
+            })}
+            {manualOutflows.map(renderManualTransaction)}
+            </>
           )
         )}
       </VStack>
@@ -457,8 +496,8 @@ export default function RecentTransactions({
         </HStack>
         <Text size="xs" className="text-muted-foreground tabular-nums text-[11px]">
           {activeTab === 'INFLOW'
-            ? `Showing ${filteredBookings.length} of ${liveInflows.length}`
-            : `Showing ${filteredSuppliers.length} of ${liveOutflows.length}`}
+            ? `Showing ${filteredBookings.length + manualInflows.length} of ${liveInflows.length + manualInflows.length}`
+            : `Showing ${filteredSuppliers.length + manualOutflows.length} of ${liveOutflows.length + manualOutflows.length}`}
         </Text>
       </HStack>
     </Card>

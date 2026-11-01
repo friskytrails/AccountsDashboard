@@ -418,25 +418,10 @@ export default function ProfitMarginPage() {
     }));
   }, []);
 
-  // ── Sort bookings client-side ──
-  const sortedBookings = [...bookings].sort((a, b) => {
-    const dir = sortBy.dir === 'asc' ? 1 : -1;
-    if (sortBy.field === 'bookingId') return dir * (a.bookingId || '').localeCompare(b.bookingId || '');
-    if (sortBy.field === 'createdAt') return dir * (new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-    if (sortBy.field === 'travellerName') return dir * (a.travellerName || '').localeCompare(b.travellerName || '');
-    if (sortBy.field === 'totalAmount') return dir * ((a.totalAmount || 0) - (b.totalAmount || 0));
-    if (sortBy.field === 'paidAmount') return dir * ((a.paidAmount || 0) - (b.paidAmount || 0));
-    if (sortBy.field === 'dueAmount') return dir * ((a.dueAmount || 0) - (b.dueAmount || 0));
-    if (sortBy.field === 'profitMargin') return dir * ((a.profitMargin || 0) - (b.profitMargin || 0));
-    if (sortBy.field === 'marginPercentage') return dir * ((a.marginPercentage || 0) - (b.marginPercentage || 0));
-    if (sortBy.field === 'startDate') return dir * (new Date(a.startDate || 0) - new Date(b.startDate || 0));
-    return 0;
-  });
-
-  // ── Flatten bookings into payment rows with all requested fields ──
+  // ── Flatten bookings into payment rows, then sort at payment-row level ──
   const displayRows = useMemo(() => {
     const list = [];
-    sortedBookings.forEach((b) => {
+    bookings.forEach((b) => {
       const payments = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments : [null];
       payments.forEach((p, idx) => {
         list.push({
@@ -446,6 +431,7 @@ export default function ProfitMarginPage() {
           profitMargin: b.profitMargin,
           marginPercentage: b.marginPercentage,
           status: b.status,
+          createdAt: b.createdAt,
           // Payment details:
           paymentId: p?.paymentId || (p?._id ? String(p._id).slice(-6) : '—'),
           settlementChannel: p?.paymentMode || '—',
@@ -460,8 +446,16 @@ export default function ProfitMarginPage() {
         });
       });
     });
+    const dir = sortBy.dir === 'asc' ? 1 : -1;
+    const numericFields = ['amount', 'totalAmount', 'paidAmount', 'dueAmount', 'profitMargin', 'marginPercentage'];
+    const dateFields = ['createdAt', 'paymentDate', 'startDate'];
+    list.sort((a, b) => {
+      if (numericFields.includes(sortBy.field)) return dir * (Number(a[sortBy.field] || 0) - Number(b[sortBy.field] || 0));
+      if (dateFields.includes(sortBy.field)) return dir * (new Date(a[sortBy.field] || 0) - new Date(b[sortBy.field] || 0));
+      return dir * String(a[sortBy.field] || '').localeCompare(String(b[sortBy.field] || ''));
+    });
     return list;
-  }, [sortedBookings]);
+  }, [bookings, sortBy]);
 
   // ── Copy to clipboard ──
   const handleCopy = useCallback((text, id) => {
@@ -607,7 +601,7 @@ export default function ProfitMarginPage() {
           </VStack>
         </HStack>
 
-        {hasFetched && sortedBookings.length > 0 && (
+        {hasFetched && bookings.length > 0 && (
           <button
             type="button"
             onClick={exportCSV}
@@ -774,7 +768,7 @@ export default function ProfitMarginPage() {
           )}
 
           {/* Empty state */}
-          {!loading && sortedBookings.length === 0 && (
+          {!loading && bookings.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center">
                 <BadgeIndianRupee className="w-7 h-7 text-muted-foreground/50" />
@@ -835,7 +829,7 @@ export default function ProfitMarginPage() {
           {!loading && pagination.total > pagination.limit && (
             <div className="px-5 py-3 border-t border-border/40 flex items-center justify-between">
               <Text className="text-xs text-muted-foreground/60">
-                Showing {displayRows.length} payment records across {sortedBookings.length} bookings
+                Showing {displayRows.length} payment records across {bookings.length} bookings
               </Text>
               <Text className="text-xs text-muted-foreground/50">
                 Increase limit or apply filters to narrow results

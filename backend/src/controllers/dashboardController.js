@@ -232,11 +232,11 @@ async function getManualFlows(startDate, endDate, account = null) {
         let cat = 'OTHERS';
         const rawCat = (t.category || '').toUpperCase();
         if (rawCat === 'STAFF_SALARIES' || rawCat === 'SALARIES' || rawCat.includes('STAFF')) cat = 'STAFF_SALARIES';
+        else if (rawCat.includes('ADVENTURE')) cat = 'ADVENTURE';
         else if (rawCat === 'MARKETING' || rawCat.includes('AD')) cat = 'MARKETING';
         else if (rawCat === 'GST' || rawCat.includes('TAX')) cat = 'GST';
         else if (rawCat.includes('HOTEL')) cat = 'HOTELS';
         else if (rawCat.includes('TRANSPORT')) cat = 'TRANSPORT';
-        else if (rawCat.includes('ADVENTURE')) cat = 'ADVENTURE';
         else if (rawCat.includes('GUIDE')) cat = 'GUIDES';
         else if (rawCat.includes('OUTSOURCED')) cat = 'OUTSOURCED';
         else if (rawCat.includes('SIGHTSEEING') || rawCat.includes('SIGHT')) cat = 'SIGHTSEEING';
@@ -257,6 +257,7 @@ async function getManualFlows(startDate, endDate, account = null) {
 async function getPriorCumulativeNet(beforeDate, account = null) {
   const db = getBookingDB();
   let priorBookingInflow = 0;
+  let priorBookingSupplierOutflow = 0;
 
   if (db) {
     const matchConditions = [

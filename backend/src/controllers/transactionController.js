@@ -14,6 +14,10 @@ const VALID_PAYMENT_MODES = [
   'FT HDFC',
   'Pratyush SBI'
 ];
+const FLOW_DIRECTIONS_BY_TYPE = {
+  INFLOW: ['TRAVELLER_TO_COMPANY', 'SUPPLIER_TO_COMPANY'],
+  OUTFLOW: ['COMPANY_TO_SUPPLIER', 'COMPANY_TO_TRAVELLER']
+};
 
 // GET /api/transactions?month=9&year=2026&type=OUTFLOW&page=1&limit=20
 async function getTransactions(req, res) {
@@ -38,9 +42,27 @@ async function getTransactions(req, res) {
       Transaction.countDocuments(filter)
     ]);
 
-    res.json({ transactions, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
+    const listTransactions = transactions.map(({ screenshot, ...transaction }) => ({
+      ...transaction,
+      hasScreenshot: Boolean(screenshot)
+    }));
+
+    res.json({ transactions: listTransactions, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
     console.error('getTransactions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// GET /api/transactions/:id/screenshot
+async function getTransactionScreenshot(req, res) {
+  try {
+    const transaction = await Transaction.findById(req.params.id).select('screenshot').lean();
+    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+    if (!transaction.screenshot) return res.status(404).json({ error: 'Screenshot not found' });
+    res.json({ screenshot: transaction.screenshot });
+  } catch (err) {
+    console.error('getTransactionScreenshot error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -310,12 +332,18 @@ async function addTransaction(req, res) {
       return res.status(400).json({ error: `paymentMode must be one of the 6 accounts: ${VALID_PAYMENT_MODES.join(', ')}` });
     }
 
+    const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[type];
     const defaultFlow = type === 'INFLOW' ? 'TRAVELLER_TO_COMPANY' : 'COMPANY_TO_SUPPLIER';
+    const resolvedFlowDirection = flowDirection === undefined ? defaultFlow : flowDirection;
+
+    if (!allowedFlowDirections.includes(resolvedFlowDirection)) {
+      return res.status(400).json({ error: `flowDirection must be one of: ${allowedFlowDirections.join(', ')}` });
+    }
 
     const txn = new Transaction({
       type,
       category,
-      flowDirection: flowDirection || defaultFlow,
+      flowDirection: resolvedFlowDirection,
       amount: parsedAmount,
       description: description || '',
       paymentMode: paymentMode || 'Kalpana BOI',
@@ -350,6 +378,16 @@ async function deleteTransaction(req, res) {
 async function editTransaction(req, res) {
   try {
     const { type, category, amount, description, paymentMode, referenceNumber, date, screenshot, flowDirection } = req.body;
+    const existingTransaction = await Transaction.findById(req.params.id).lean();
+    if (!existingTransaction) return res.status(404).json({ error: 'Transaction not found' });
+
+    const effectiveType = type === undefined ? existingTransaction.type : type;
+    const effectiveFlowDirection = flowDirection === undefined ? existingTransaction.flowDirection : flowDirection;
+    const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[effectiveType];
+    if (!allowedFlowDirections || !allowedFlowDirections.includes(effectiveFlowDirection)) {
+      return res.status(400).json({ error: 'flowDirection must be compatible with type' });
+    }
+
     const update = {};
     if (type) update.type = type;
     if (category) update.category = category;
@@ -361,10 +399,12 @@ async function editTransaction(req, res) {
     if (screenshot !== undefined) update.screenshot = screenshot;
     if (date) update.date = new Date(date);
 
-    const txn = await Transaction.findByIdAndUpdate(req.params.id, update, { new: true });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    const txn = await Transaction.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     res.json({ success: true, transaction: txn });
   } catch (err) {
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: err.message });
+    }
     console.error('editTransaction error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -627,6 +667,7 @@ async function getBookingMargins(req, res) {
 
 module.exports = {
   getTransactions,
+  getTransactionScreenshot,
   getLiveInflows,
   getLiveOutflows,
   addTransaction,

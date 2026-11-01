@@ -96,6 +96,15 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
   const [outflows, setOutflows] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const openManualScreenshot = async (transactionId, title) => {
+    try {
+      const { screenshot } = await apiFetch(`/transactions/${transactionId}/screenshot`);
+      setActiveScreenshot({ url: screenshot, title });
+    } catch (err) {
+      toast.error(err.message || 'Failed to load screenshot');
+    }
+  };
+
   // Auto-switch to MONTH scope whenever user changes month/year in header
   useEffect(() => {
     setTimeScope('MONTH');
@@ -318,6 +327,30 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     });
   }, [manualTx, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
+  const mergedInflows = useMemo(() => {
+    const manualInflows = filteredManual
+      .filter((t) => t.type === 'INFLOW')
+      .map((t) => ({
+        ...t,
+        _id: `manual-${t._id}`,
+        paymentId: t.referenceNumber || '—',
+        paymentDate: t.date,
+        amountPaid: t.amount,
+        attachment: '',
+        screenshotTransactionId: t.hasScreenshot ? t._id : null
+      }));
+    const rows = [...filteredBookings, ...manualInflows];
+    rows.sort((a, b) => {
+      if (sortBy === 'date_desc') return new Date(b.paymentDate) - new Date(a.paymentDate);
+      if (sortBy === 'date_asc') return new Date(a.paymentDate) - new Date(b.paymentDate);
+      if (sortBy === 'amount_desc') return Number(b.amountPaid || 0) - Number(a.amountPaid || 0);
+      if (sortBy === 'amount_asc') return Number(a.amountPaid || 0) - Number(b.amountPaid || 0);
+      if (sortBy === 'name_asc') return (a.travellerName || a.description || '').localeCompare(b.travellerName || b.description || '');
+      return 0;
+    });
+    return rows;
+  }, [filteredBookings, filteredManual, sortBy]);
+
   // 4. Filtered Suppliers
   const filteredSuppliers = useMemo(() => {
     return outflows.filter((s) => {
@@ -330,14 +363,16 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
         const id = (s.supplierId || '').toLowerCase();
         const bId = (s.bookingId || '').toLowerCase();
         const city = (s.city || '').toLowerCase();
-        return name.includes(q) || id.includes(q) || bId.includes(q) || city.includes(q);
+        const paymentId = (s.paymentId || '').toString().toLowerCase();
+        const category = (s.category || '').toLowerCase();
+        return name.includes(q) || id.includes(q) || bId.includes(q) || city.includes(q) || paymentId.includes(q) || category.includes(q);
       }
       return true;
     });
   }, [outflows, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
   // Active counts & totals
-  const totalVolume = filteredBookings.reduce((sum, b) => sum + Number(b.amountPaid || 0), 0);
+  const totalVolume = mergedInflows.reduce((sum, b) => sum + Number(b.amountPaid || 0), 0);
 
   // Export to CSV helper
   const exportCSV = () => {
@@ -414,7 +449,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                   Filtered Leads
                 </span>
                 <span className="text-lg font-bold text-foreground tabular-nums">
-                  {filteredBookings.length}
+                  {mergedInflows.length}
                 </span>
               </div>
             </div>
@@ -612,7 +647,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
           <span className="text-xs font-medium text-muted-foreground tabular-nums">
             {activeTab === 'INFLOW'
-              ? `${filteredBookings.length} entries`
+              ? `${mergedInflows.length} entries`
               : `${filteredSuppliers.length + filteredManual.filter(t => t.type === 'OUTFLOW').length} entries`}
           </span>
         </div>
@@ -637,12 +672,12 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
               <ArrowDownLeft className="w-4 h-4 text-emerald-400" />
               <span className="text-sm font-bold text-foreground">Customer Inflows</span>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 tabular-nums">
-                {filteredBookings.length} records
+                {mergedInflows.length} records
               </span>
             </div>
           </div>
 
-          {filteredBookings.length === 0 ? (
+          {mergedInflows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center">
                 <ArrowDownLeft className="w-7 h-7 text-muted-foreground/40" />
@@ -677,7 +712,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredBookings.map((b) => {
+                  {mergedInflows.map((b) => {
                     const id = b._id || b.paymentId;
                     const isExpanded = expandedIds.has(id);
                     const channel = normalizeMode(b.paymentMode);
@@ -752,10 +787,12 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
                         {/* 5. SS */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
-                          {b.attachment ? (
+                          {b.attachment || b.screenshotTransactionId ? (
                             <button
                               type="button"
-                              onClick={() => setActiveScreenshot({ url: b.attachment, title: `Booking ${b.bookingId || '—'} — Payment Proof` })}
+                              onClick={() => b.screenshotTransactionId
+                                ? openManualScreenshot(b.screenshotTransactionId, 'Manual Inflow — Payment Proof')
+                                : setActiveScreenshot({ url: b.attachment, title: `Booking ${b.bookingId || '—'} — Payment Proof` })}
                               className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
                               title="Click to preview screenshot"
                             >
@@ -807,7 +844,8 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
               date: t.date,
               amount: t.amount || 0,
               account: normalizeMode(t.paymentMode),
-              attachment: t.screenshot || ''
+              attachment: '',
+              screenshotTransactionId: t.hasScreenshot ? t._id : null
             }));
           const allOutflows = [...supplierRows, ...manualOutRows].sort(
             (a, b) => new Date(b.date) - new Date(a.date)
@@ -908,10 +946,12 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
                         {/* 6. SS */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          {row.attachment ? (
+                          {row.attachment || row.screenshotTransactionId ? (
                             <button
                               type="button"
-                              onClick={() => setActiveScreenshot({ url: row.attachment, title: `${row.category || 'Outflow'} — Payment Proof` })}
+                              onClick={() => row.screenshotTransactionId
+                                ? openManualScreenshot(row.screenshotTransactionId, `${row.category || 'Outflow'} — Payment Proof`)
+                                : setActiveScreenshot({ url: row.attachment, title: `${row.category || 'Outflow'} — Payment Proof` })}
                               className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
                               title="Click to preview screenshot"
                             >
@@ -966,15 +1006,17 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
               className="max-h-[72vh] w-auto object-contain rounded-lg shadow-md"
             />
             <div className="w-full flex justify-end gap-2 pt-3 mt-3 border-t border-border/60">
-              <a
-                href={activeScreenshot.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 transition-all cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Full Size</span>
-              </a>
+              {!activeScreenshot.url.startsWith('data:') && (
+                <a
+                  href={activeScreenshot.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 transition-all cursor-pointer"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Full Size</span>
+                </a>
+              )}
             </div>
           </div>
         </div>
