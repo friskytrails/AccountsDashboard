@@ -3,84 +3,101 @@ import { Card, Box, Heading, Text, HStack, VStack, Badge, BadgeText, Button, But
 import {
   PieChart,
   Briefcase,
-  Building2,
-  Wrench,
-  Hotel,
-  Car,
-  Users,
-  Camera,
   Megaphone,
   MoreHorizontal,
-  Plus
+  FileText,
+  Plus,
+  Hotel,
+  Car,
+  Compass,
+  Users,
+  Globe,
+  Camera
 } from 'lucide-react';
 
 const CATEGORY_MAP = {
-  SALARIES: {
-    label: 'Salaries & Staff',
+  HOTELS: {
+    label: 'Hotels',
+    icon: Hotel,
+    hex: '#3B82F6', // Blue
+    color: 'text-blue-400',
+    bg: 'bg-blue-400',
+    container: 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+  },
+  TRANSPORT: {
+    label: 'Transport',
+    icon: Car,
+    hex: '#10B981', // Emerald
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-400',
+    container: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+  },
+  ADVENTURE: {
+    label: 'Adventure',
+    icon: Compass,
+    hex: '#F97316', // Orange
+    color: 'text-orange-400',
+    bg: 'bg-orange-400',
+    container: 'bg-orange-500/15 border-orange-500/30 text-orange-400'
+  },
+  SIGHTSEEING: {
+    label: 'Sightseeing',
+    icon: Camera,
+    hex: '#14B8A6', // Teal
+    color: 'text-teal-400',
+    bg: 'bg-teal-400',
+    container: 'bg-teal-500/15 border-teal-500/30 text-teal-400'
+  },
+  GUIDES: {
+    label: 'Guides',
+    icon: Users,
+    hex: '#06B6D4', // Cyan
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-400',
+    container: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
+  },
+  OUTSOURCED: {
+    label: 'Outsourced',
+    icon: Globe,
+    hex: '#8B5CF6', // Purple
+    color: 'text-purple-400',
+    bg: 'bg-purple-400',
+    container: 'bg-purple-500/15 border-purple-500/30 text-purple-400'
+  },
+  STAFF_SALARIES: {
+    label: 'Staff Salaries',
     icon: Briefcase,
     hex: '#F43F5E', // Rose
     color: 'text-rose-400',
     bg: 'bg-rose-400',
     container: 'bg-rose-500/15 border-rose-500/30 text-rose-400'
   },
-  SUPPLIERS: {
-    label: 'Suppliers & Vendors',
-    icon: Building2,
-    hex: '#0EA5E9', // Sky
-    color: 'text-sky-400',
-    bg: 'bg-sky-400',
-    container: 'bg-sky-500/15 border-sky-500/30 text-sky-400'
-  },
-  OPERATIONS: {
-    label: 'Operations & Fleet',
-    icon: Wrench,
-    hex: '#10B981', // Emerald
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-400',
-    container: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-  },
-  HOTELS: {
-    label: 'Hotels & Lodging',
-    icon: Hotel,
-    hex: '#F59E0B', // Amber
-    color: 'text-amber-400',
-    bg: 'bg-amber-400',
-    container: 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-  },
-  TRANSPORT: {
-    label: 'Transport & Fleet',
-    icon: Car,
-    hex: '#06B6D4', // Cyan
-    color: 'text-cyan-400',
-    bg: 'bg-cyan-400',
-    container: 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
-  },
-  GUIDES: {
-    label: 'Tour Guides',
-    icon: Users,
-    hex: '#14B8A6', // Teal
-    color: 'text-teal-400',
-    bg: 'bg-teal-400',
-    container: 'bg-teal-500/15 border-teal-500/30 text-teal-400'
-  },
-  SIGHTSEEING: {
-    label: 'Sightseeing & Entry',
-    icon: Camera,
-    hex: '#8B5CF6', // Violet
-    color: 'text-violet-400',
-    bg: 'bg-violet-400',
-    container: 'bg-violet-500/15 border-violet-500/30 text-violet-400'
+  SALARIES: {
+    label: 'Staff Salaries',
+    icon: Briefcase,
+    hex: '#F43F5E',
+    color: 'text-rose-400',
+    bg: 'bg-rose-400',
+    container: 'bg-rose-500/15 border-rose-500/30 text-rose-400'
   },
   MARKETING: {
-    label: 'Marketing & Ads',
+    label: 'Marketing and Ads',
     icon: Megaphone,
     hex: '#D946EF', // Fuchsia
     color: 'text-fuchsia-400',
     bg: 'bg-fuchsia-400',
     container: 'bg-fuchsia-500/15 border-fuchsia-500/30 text-fuchsia-400'
   },
+  GST: {
+    label: 'GST',
+    icon: FileText,
+    hex: '#F59E0B', // Amber
+    color: 'text-amber-400',
+    bg: 'bg-amber-400',
+    container: 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+  },
   OTHERS: {
-    label: 'Miscellaneous',
+    label: 'Others',
     icon: MoreHorizontal,
     hex: '#94A3B8', // Slate
     color: 'text-slate-400',
@@ -182,7 +199,7 @@ export default function DonutChart({
           </Text>
         </VStack>
         <Badge variant={totalOutflow > 0 ? 'error' : 'muted'} size="md" className="py-1 px-3 border border-border/70 rounded-md">
-          <BadgeText className="font-mono text-xs font-bold">{formatRupee(totalOutflow)}</BadgeText>
+          <BadgeText className="text-xs font-semibold tabular-nums">{formatRupee(totalOutflow)}</BadgeText>
         </Badge>
       </HStack>
 
@@ -265,7 +282,7 @@ export default function DonutChart({
                   {tooltip.meta.label}
                 </span>
               </div>
-              <div className="flex items-center justify-between gap-4 pt-1.5 border-t border-border/50 font-mono text-xs">
+              <div className="flex items-center justify-between gap-4 pt-1.5 border-t border-border/50 tabular-nums text-xs">
                 <span className="text-foreground font-extrabold text-sm">
                   {formatRupee(tooltip.amount)}
                 </span>
@@ -287,10 +304,10 @@ export default function DonutChart({
       {/* Legend & Breakdown Rows */}
       <VStack space="sm" className="pt-4 border-t border-border/60">
         <HStack space="sm" className="items-center justify-between mb-1 px-1">
-          <Text size="2xs" bold className="uppercase tracking-widest text-muted-foreground text-[11px] font-mono">
+          <Text size="2xs" bold className="uppercase tracking-widest text-muted-foreground text-[11px]">
             Category Legend
           </Text>
-          <Badge variant="muted" size="sm" className="py-0 px-2 text-[10.5px] font-mono">
+          <Badge variant="muted" size="sm" className="py-0 px-2 text-[10.5px] tabular-nums">
             <BadgeText>
               {categoryBreakdown.length > 0
                 ? `${categoryBreakdown.length} ${categoryBreakdown.length === 1 ? 'Category' : 'Categories'}`
@@ -332,11 +349,10 @@ export default function DonutChart({
                 space="md"
                 onMouseEnter={() => setHoveredCategory(item.category)}
                 onMouseLeave={() => setHoveredCategory(null)}
-                className={`items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${
-                  isHovered
+                className={`items-center justify-between p-3 rounded-lg border transition-all cursor-pointer ${isHovered
                     ? 'bg-muted/70 border-border shadow-lg -translate-y-0.5'
                     : 'bg-muted/30 hover:bg-muted/50 border-border/50'
-                }`}
+                  }`}
               >
                 <HStack space="sm" className="items-center min-w-0">
                   <Box
@@ -365,11 +381,11 @@ export default function DonutChart({
                 </HStack>
 
                 <VStack space="2xs" className="items-end shrink-0">
-                  <Text size="sm" bold className="text-foreground font-mono text-xs font-bold">
+                  <Text size="sm" bold className="text-foreground text-xs font-semibold tabular-nums">
                     {formatRupee(item.amount)}
                   </Text>
                   <span
-                    className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md"
+                    className="text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded-md"
                     style={{
                       backgroundColor: `${meta.hex}18`,
                       color: meta.hex

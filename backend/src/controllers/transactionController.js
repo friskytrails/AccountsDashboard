@@ -1,24 +1,23 @@
 const Transaction = require('../models/Transaction');
 const { getBookingDB } = require('../config/bookingDb');
 
-const VALID_CATEGORIES = ['SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'MARKETING', 'OTHERS'];
+const VALID_CATEGORIES = [
+  'STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST',
+  'SALARIES', 'SUPPLIERS', 'OPERATIONS', 'HOTELS', 'TRANSPORT', 'GUIDES', 'SIGHTSEEING', 'ADVENTURE', 'OUTSOURCED',
+  'TRAVELLER_TO_COMPANY', 'SUPPLIER_TO_COMPANY', 'COMPANY_TO_SUPPLIER', 'COMPANY_TO_TRAVELLER'
+];
 const VALID_PAYMENT_MODES = [
   'Kalpana BOI',
   'Kalpana PNB',
   'Babita AU',
   'Hari Mohan BOB',
   'FT HDFC',
-  'Pratyush SBI',
-  'Cash',
-  'Other',
-  'UPI',
-  'BANK_TRANSFER',
-  'CASH',
-  'CARD',
-  'CHEQUE',
-  'OTHER',
-  'Supplier'
+  'Pratyush SBI'
 ];
+const FLOW_DIRECTIONS_BY_TYPE = {
+  INFLOW: ['TRAVELLER_TO_COMPANY', 'SUPPLIER_TO_COMPANY'],
+  OUTFLOW: ['COMPANY_TO_SUPPLIER', 'COMPANY_TO_TRAVELLER']
+};
 
 // GET /api/transactions?month=9&year=2026&type=OUTFLOW&page=1&limit=20
 async function getTransactions(req, res) {
@@ -43,9 +42,27 @@ async function getTransactions(req, res) {
       Transaction.countDocuments(filter)
     ]);
 
-    res.json({ transactions, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
+    const listTransactions = transactions.map(({ screenshot, ...transaction }) => ({
+      ...transaction,
+      hasScreenshot: Boolean(screenshot)
+    }));
+
+    res.json({ transactions: listTransactions, total, page: parseInt(page), totalPages: Math.ceil(total / parseInt(limit)) });
   } catch (err) {
     console.error('getTransactions error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// GET /api/transactions/:id/screenshot
+async function getTransactionScreenshot(req, res) {
+  try {
+    const transaction = await Transaction.findById(req.params.id).select('screenshot').lean();
+    if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
+    if (!transaction.screenshot) return res.status(404).json({ error: 'Screenshot not found' });
+    res.json({ screenshot: transaction.screenshot });
+  } catch (err) {
+    console.error('getTransactionScreenshot error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -55,6 +72,7 @@ async function getLiveInflows(req, res) {
   try {
     const month = parseInt(req.query.month, 10);
     const year = parseInt(req.query.year, 10);
+    const accountFilter = req.query.paymentMode || req.query.account;
     const hasMonth = !isNaN(month) && month >= 1 && month <= 12;
     const hasYear = !isNaN(year) && year >= 2000;
 
@@ -70,6 +88,10 @@ async function getLiveInflows(req, res) {
       },
       { 'payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] } }
     ];
+
+    if (accountFilter && accountFilter !== 'All Channels' && accountFilter !== 'ALL') {
+      matchConditions.push({ 'payments.paymentMode': accountFilter });
+    }
 
     if (hasMonth && hasYear) {
       const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
@@ -143,6 +165,7 @@ async function getLiveOutflows(req, res) {
   try {
     const month = parseInt(req.query.month, 10);
     const year = parseInt(req.query.year, 10);
+    const accountFilter = req.query.paymentMode || req.query.account;
     const hasMonth = !isNaN(month) && month >= 1 && month <= 12;
     const hasYear = !isNaN(year) && year >= 2000;
 
@@ -158,6 +181,15 @@ async function getLiveOutflows(req, res) {
       },
       { 'services.payments.status': { $nin: ['REJECTED', 'DISAPPROVED'] } }
     ];
+
+    if (accountFilter && accountFilter !== 'All Channels' && accountFilter !== 'ALL') {
+      matchConditions.push({
+        $or: [
+          { 'services.payments.accountSubMode': accountFilter },
+          { 'services.payments.paymentMode': accountFilter }
+        ]
+      });
+    }
 
     if (hasMonth && hasYear) {
       const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
@@ -212,7 +244,19 @@ async function getLiveOutflows(req, res) {
           category: '$services.supplierType',
           amount: '$services.payments.paidAmount',
           date: '$services.payments.paymentDateObj',
-          paymentMode: '$services.payments.paymentMode',
+          paymentMode: {
+            $cond: {
+              if: { $and: [
+                { $ne: ['$services.payments.accountSubMode', null] },
+                { $ne: ['$services.payments.accountSubMode', ''] }
+              ]},
+              then: '$services.payments.accountSubMode',
+              else: '$services.payments.paymentMode'
+            }
+          },
+          paymentId: '$services.payments.paymentId',
+          attachment: '$services.payments.attachment',
+          attachmentName: '$services.payments.attachmentName',
           status: '$services.payments.status',
           verified: '$services.payments.verified',
           details: '$services.payments.details',
@@ -231,8 +275,10 @@ async function getLiveOutflows(req, res) {
         const typeStr = s.category.toLowerCase();
         if (typeStr.includes('hotel')) cat = 'HOTELS';
         else if (typeStr.includes('transport')) cat = 'TRANSPORT';
+        else if (typeStr.includes('adventure')) cat = 'ADVENTURE';
+        else if (typeStr.includes('sightseeing') || typeStr.includes('sight')) cat = 'SIGHTSEEING';
         else if (typeStr.includes('guide')) cat = 'GUIDES';
-        else if (typeStr.includes('adventure') || typeStr.includes('sightseeing')) cat = 'SIGHTSEEING';
+        else if (typeStr.includes('outsourced')) cat = 'OUTSOURCED';
         else cat = s.category.toUpperCase();
       }
 
@@ -251,6 +297,8 @@ async function getLiveOutflows(req, res) {
         date: s.date,
         amount,
         paymentMode: s.paymentMode,
+        paymentId: s.paymentId || (s._id ? String(s._id).slice(-8) : '—'),
+        attachment: s.attachment || '',
         details: s.details,
         addedByName: s.addedByName
       };
@@ -268,7 +316,7 @@ async function getLiveOutflows(req, res) {
 // POST /api/transactions — add a new manual expense or income
 async function addTransaction(req, res) {
   try {
-    const { type, category, amount, description, paymentMode, referenceNumber, date } = req.body;
+    const { type, category, amount, description, paymentMode, referenceNumber, date, screenshot, flowDirection } = req.body;
 
     if (!type || !['INFLOW', 'OUTFLOW'].includes(type)) {
       return res.status(400).json({ error: 'type must be INFLOW or OUTFLOW' });
@@ -281,16 +329,26 @@ async function addTransaction(req, res) {
       return res.status(400).json({ error: 'amount must be a positive number' });
     }
     if (paymentMode && !VALID_PAYMENT_MODES.includes(paymentMode)) {
-      return res.status(400).json({ error: `paymentMode must be one of: ${VALID_PAYMENT_MODES.join(', ')}` });
+      return res.status(400).json({ error: `paymentMode must be one of the 6 accounts: ${VALID_PAYMENT_MODES.join(', ')}` });
+    }
+
+    const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[type];
+    const defaultFlow = type === 'INFLOW' ? 'TRAVELLER_TO_COMPANY' : 'COMPANY_TO_SUPPLIER';
+    const resolvedFlowDirection = flowDirection === undefined ? defaultFlow : flowDirection;
+
+    if (!allowedFlowDirections.includes(resolvedFlowDirection)) {
+      return res.status(400).json({ error: `flowDirection must be one of: ${allowedFlowDirections.join(', ')}` });
     }
 
     const txn = new Transaction({
       type,
       category,
+      flowDirection: resolvedFlowDirection,
       amount: parsedAmount,
       description: description || '',
       paymentMode: paymentMode || 'Kalpana BOI',
       referenceNumber: referenceNumber || '',
+      screenshot: screenshot || '',
       date: date ? new Date(date) : new Date(),
       addedBy: req.user?.userId || undefined,
       addedByName: req.user?.name || 'Finance Team'
@@ -319,20 +377,34 @@ async function deleteTransaction(req, res) {
 // PUT /api/transactions/:id
 async function editTransaction(req, res) {
   try {
-    const { type, category, amount, description, paymentMode, referenceNumber, date } = req.body;
+    const { type, category, amount, description, paymentMode, referenceNumber, date, screenshot, flowDirection } = req.body;
+    const existingTransaction = await Transaction.findById(req.params.id).lean();
+    if (!existingTransaction) return res.status(404).json({ error: 'Transaction not found' });
+
+    const effectiveType = type === undefined ? existingTransaction.type : type;
+    const effectiveFlowDirection = flowDirection === undefined ? existingTransaction.flowDirection : flowDirection;
+    const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[effectiveType];
+    if (!allowedFlowDirections || !allowedFlowDirections.includes(effectiveFlowDirection)) {
+      return res.status(400).json({ error: 'flowDirection must be compatible with type' });
+    }
+
     const update = {};
     if (type) update.type = type;
     if (category) update.category = category;
+    if (flowDirection) update.flowDirection = flowDirection;
     if (amount !== undefined) update.amount = parseFloat(amount);
     if (description !== undefined) update.description = description;
     if (paymentMode) update.paymentMode = paymentMode;
     if (referenceNumber !== undefined) update.referenceNumber = referenceNumber;
+    if (screenshot !== undefined) update.screenshot = screenshot;
     if (date) update.date = new Date(date);
 
-    const txn = await Transaction.findByIdAndUpdate(req.params.id, update, { new: true });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    const txn = await Transaction.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true });
     res.json({ success: true, transaction: txn });
   } catch (err) {
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ error: err.message });
+    }
     console.error('editTransaction error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -505,6 +577,7 @@ async function getBookingMargins(req, res) {
                 totalPaidAmount: { $sum: { $toDouble: { $ifNull: ['$paidAmount', 0] } } },
                 totalDueAmount: { $sum: { $toDouble: { $ifNull: ['$dueAmount', 0] } } },
                 totalProfitMargin: { $sum: { $toDouble: { $ifNull: ['$profitMargin', 0] } } },
+                totalGstAmount: { $sum: { $toDouble: { $ifNull: ['$gstAmount', 0] } } },
                 totalCount: { $sum: 1 }
               }
             }
@@ -525,6 +598,7 @@ async function getBookingMargins(req, res) {
                 paidAmount: 1,
                 dueAmount: 1,
                 profitMargin: 1,
+                gstAmount: { $ifNull: ['$gstAmount', 0] },
                 marginPercentage: { $round: ['$marginPercentage', 2] },
                 startDate: 1,
                 endDate: 1,
@@ -533,7 +607,9 @@ async function getBookingMargins(req, res) {
                 createdAt: 1,
                 creatorName: 1,
                 adults: 1,
-                children: 1
+                children: 1,
+                transactionId: 1,
+                payments: 1
               }
             }
           ]
@@ -548,6 +624,7 @@ async function getBookingMargins(req, res) {
     const totalPaidAmount = Math.round(rawSummary.totalPaidAmount || 0);
     const totalDueAmount = Math.round(rawSummary.totalDueAmount || 0);
     const totalProfitMargin = Math.round(rawSummary.totalProfitMargin || 0);
+    const totalGstAmount = Math.round(rawSummary.totalGstAmount || 0);
     const totalCount = rawSummary.totalCount || 0;
     const overallMarginPercent =
       totalPackageCost > 0
@@ -560,6 +637,7 @@ async function getBookingMargins(req, res) {
       paidAmount: Math.round(Number(b.paidAmount || 0)),
       dueAmount: Math.round(Number(b.dueAmount || 0)),
       profitMargin: Math.round(Number(b.profitMargin || 0)),
+      gstAmount: Math.round(Number(b.gstAmount || 0)),
       marginPercentage: +(b.marginPercentage || 0).toFixed(2)
     }));
 
@@ -569,6 +647,7 @@ async function getBookingMargins(req, res) {
         totalPaidAmount,
         totalDueAmount,
         totalProfitMargin,
+        totalGstAmount,
         overallMarginPercent,
         totalCount
       },
@@ -588,6 +667,7 @@ async function getBookingMargins(req, res) {
 
 module.exports = {
   getTransactions,
+  getTransactionScreenshot,
   getLiveInflows,
   getLiveOutflows,
   addTransaction,

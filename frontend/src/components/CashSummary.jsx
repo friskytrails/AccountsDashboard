@@ -94,7 +94,7 @@ export default function CashSummary({
               Treasury Cash Flow & Reconciliation Pipeline
             </Heading>
             <Badge variant="muted" size="md" className="py-1 px-3 border border-border/70">
-              <BadgeText className="font-mono text-xs font-semibold">{monthName} {year} Fiscal Cycle</BadgeText>
+              <BadgeText className="text-xs font-semibold tabular-nums">{monthName} {year} Fiscal Cycle</BadgeText>
             </Badge>
           </HStack>
         </HStack>
@@ -119,7 +119,7 @@ export default function CashSummary({
               <VStack space="sm">
                 {/* Stage Header */}
                 <HStack space="sm" className="justify-between items-center">
-                  <Text size="2xs" bold className="font-mono text-muted-foreground text-[11px] uppercase tracking-wider">
+                  <Text size="2xs" bold className="text-muted-foreground text-[11px] uppercase tracking-wider">
                     Step {stage.step}
                   </Text>
                   <Box className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${stage.iconBg}`}>
@@ -134,7 +134,7 @@ export default function CashSummary({
 
                 {/* Currency Figure */}
                 <Box className="my-1">
-                  <Text size="lg" bold className={`font-mono font-extrabold text-xl xl:text-2xl ${stage.color}`}>
+                  <Text size="lg" bold className={`font-extrabold text-xl xl:text-2xl tabular-nums ${stage.color}`}>
                     {stage.prefix}{formatRupee(stage.amount)}
                   </Text>
                 </Box>
