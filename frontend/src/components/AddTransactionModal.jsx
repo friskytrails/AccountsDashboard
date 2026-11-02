@@ -157,13 +157,14 @@ export default function AddTransactionModal({
   const handleProcessImageFile = (file) => {
     if (!file || !file.type.startsWith('image/')) {
       toast.error('Please provide an image file');
-      return;
+      return false;
     }
 
     const reader = new FileReader();
     reader.onload = (uploadEvent) => {
       const img = new Image();
       img.onload = () => {
+        try {
         const maxDim = 1600;
         let width = img.width;
         let height = img.height;
@@ -180,14 +181,22 @@ export default function AddTransactionModal({
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Could not process the image');
         ctx.drawImage(img, 0, 0, width, height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setScreenshot(dataUrl);
         setScreenshotName(file.name || 'clipboard-screenshot.jpg');
+        toast.success('Screenshot attached successfully');
+        } catch {
+          toast.error('Failed to process screenshot');
+        }
       };
+      img.onerror = () => toast.error('Could not decode the selected image');
       img.src = uploadEvent.target.result;
     };
+    reader.onerror = () => toast.error('Could not read the selected image');
     reader.readAsDataURL(file);
+    return true;
   };
 
   const handleFileInputChange = (e) => {
@@ -195,6 +204,7 @@ export default function AddTransactionModal({
     if (file) {
       handleProcessImageFile(file);
     }
+    e.target.value = '';
   };
 
   const handleDrop = (e) => {
@@ -203,7 +213,6 @@ export default function AddTransactionModal({
     const file = e.dataTransfer.files?.[0];
     if (file) {
       handleProcessImageFile(file);
-      toast.success('Screenshot attached successfully');
     }
   };
 
