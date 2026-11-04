@@ -107,9 +107,15 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
           </div>
 
           {selectedAccount !== 'ALL' && (
-            <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 py-1 px-3 rounded-lg self-start md:self-auto">
+            <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 py-1.5 px-3 rounded-lg self-start md:self-auto flex-wrap">
               <span className="text-xs text-foreground font-semibold">
                 Filtering by: <strong className="text-primary">{selectedAccount}</strong>
+              </span>
+              <span className="text-xs text-amber-400 font-medium tabular-nums">
+                Carryforward: <strong>₹{Number(summary?.openingBalance || 0).toLocaleString('en-IN')}</strong>
+              </span>
+              <span className="text-xs text-indigo-400 font-medium tabular-nums">
+                Closing: <strong>₹{Number(summary?.closingBalance || 0).toLocaleString('en-IN')}</strong>
               </span>
               <button
                 type="button"
@@ -168,6 +174,7 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
         totalInflow={summary?.totalInflow || 0}
         totalOutflow={summary?.totalOutflow || 0}
         netCashFlow={summary?.netCashFlow || 0}
+        openingBalance={summary?.openingBalance || 0}
         closingBalance={summary?.closingBalance || 0}
         changes={summary?.changes || {}}
         month={selectedMonth}
@@ -178,7 +185,7 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
       {/* Row 2: Full-Width Majestic Daily Cash Flow Velocity Visualization */}
       <CashFlowChart dailyTrend={summary?.dailyTrend || []} loading={loading} />
 
-      {/* Row 4: Two-Column Dedicated Operational & Ledger Workspace */}
+      {/* Row 3: Two-Column Dedicated Operational & Ledger Workspace */}
       <Box id="transactions-audit-section" className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start scroll-mt-28">
         {/* Left Column (7 cols): Full-Featured Audit & Transaction Ledger */}
         <Box className="xl:col-span-7">

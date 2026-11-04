@@ -1,30 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   TrendingUp,
   TrendingDown,
   ArrowLeft,
-  Search,
-  RotateCcw,
-  Eye,
   RefreshCw,
-  FileText,
-  AlertCircle,
   Percent,
-  Copy,
-  Check,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUpDown,
   Calendar,
-  User,
   Package,
   BadgeIndianRupee,
-  Filter,
-  Download,
-  ExternalLink,
-  X,
-  Image as ImageIcon
+  Building2,
+  Wallet,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Scale
 } from 'lucide-react';
 import { apiFetch } from '../utils/api';
 import toast from 'react-hot-toast';
@@ -35,16 +26,8 @@ import {
   Text,
   Heading
 } from '@/components/ui';
-import { useMemo } from 'react';
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatINR(n) {
-  if (n === null || n === undefined) return '₹0';
-  const abs = Math.abs(Math.round(Number(n)));
-  if (abs >= 1_00_00_000) return `₹${(abs / 1_00_00_000).toFixed(2)}Cr`;
-  if (abs >= 1_00_000) return `₹${(abs / 1_00_000).toFixed(2)}L`;
-  return `₹${abs.toLocaleString('en-IN')}`;
-}
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatINRFull(n) {
   if (n === null || n === undefined) return '₹0';
@@ -54,44 +37,14 @@ function formatINRFull(n) {
   return num < 0 ? `-₹${formatted}` : `₹${formatted}`;
 }
 
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatDateInput(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '';
-  return d.toISOString().slice(0, 10);
-}
-
-function getInitials(name = '') {
-  if (!name || !name.trim()) return 'FT';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2 && parts[0] && parts[1]) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.trim().slice(0, 2).toUpperCase();
-}
-
-const AVATAR_COLORS = [
-  'from-emerald-500 to-teal-600',
-  'from-sky-500 to-blue-600',
-  'from-violet-500 to-purple-600',
-  'from-orange-500 to-amber-600',
-  'from-rose-500 to-pink-600',
-  'from-cyan-500 to-sky-600',
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ];
-function avatarColor(name = '') {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
 
-// ─── Animated Number ───────────────────────────────────────────────────────────
+// ─── Animated Number Component ────────────────────────────────────────────────
 
-function AnimatedNumber({ value, prefix = '₹', duration = 900 }) {
+function AnimatedNumber({ value, prefix = '₹', duration = 800 }) {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef(null);
   const startRef = useRef(null);
@@ -114,787 +67,291 @@ function AnimatedNumber({ value, prefix = '₹', duration = 900 }) {
       if (progress < 1) rafRef.current = requestAnimationFrame(step);
     }
     rafRef.current = requestAnimationFrame(step);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [value, duration]);
 
   const abs = Math.abs(display);
   let formatted;
   if (abs >= 1_00_00_000) formatted = `${prefix}${(abs / 1_00_00_000).toFixed(2)}Cr`;
-  else if (abs >= 1_00_000) formatted = `${prefix}${(abs / 1_00_000).toFixed(2)}L`;
+  else if (abs >= 1_00_000) formatted = `${prefix}${(abs / 1_00_00_000 >= 1 ? (abs / 1_00_00_000).toFixed(2) + 'Cr' : (abs / 1_00_000).toFixed(2) + 'L')}`;
   else formatted = `${prefix}${abs.toLocaleString('en-IN')}`;
 
   return <span>{display < 0 ? `-${formatted}` : formatted}</span>;
 }
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
+// ─── Modern Metric Card ───────────────────────────────────────────────────────
 
-function KpiCard({ label, value, icon: Icon, colorClass, bgGlow, badge, subtext }) {
+function KpiCard({ label, value, icon: Icon, colorClass, bgGlow, badge, subtext, rawAmount }) {
   return (
     <Box
-      className={`relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl px-6 py-5 flex flex-col gap-3 shadow-xl overflow-hidden glow-card transition-all duration-300 hover:scale-[1.015]`}
+      className="relative rounded-2xl border border-border/70 bg-card/85 backdrop-blur-xl p-5 md:p-6 flex flex-col justify-between shadow-xl glow-card transition-all duration-300 hover:scale-[1.015] hover:border-border overflow-hidden"
     >
-      {/* Ambient glow blob */}
-      <div className={`absolute -top-6 -right-6 w-28 h-28 rounded-full blur-3xl opacity-20 ${bgGlow}`} />
+      {/* Ambient background glow */}
+      <div className={`absolute -top-8 -right-8 w-32 h-32 rounded-full blur-3xl opacity-20 pointer-events-none ${bgGlow}`} />
 
-      <HStack className="items-center justify-between">
-        <Text className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground/80">
-          {label}
-        </Text>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bgGlow} bg-opacity-20 border border-white/10`}>
-          <Icon className={`w-4.5 h-4.5 ${colorClass}`} />
+      <div className="space-y-3 relative z-10">
+        <HStack className="items-center justify-between">
+          <Text className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground/80">
+            {label}
+          </Text>
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${bgGlow} bg-opacity-20 border border-white/10 shrink-0`}>
+            <Icon className={`w-4.5 h-4.5 ${colorClass}`} />
+          </div>
+        </HStack>
+
+        <div
+          title={formatINRFull(rawAmount !== undefined ? rawAmount : value)}
+          className={`text-2xl md:text-3xl font-black tracking-tight ${colorClass} tabular-nums cursor-default`}
+        >
+          <AnimatedNumber value={value} />
         </div>
-      </HStack>
-
-      <div
-        title={formatINRFull(value)}
-        className={`text-3xl font-black tracking-tight ${colorClass} tabular-nums cursor-default`}
-      >
-        <AnimatedNumber value={value} />
       </div>
 
-      {badge && (
-        <div className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border w-fit ${badge.className}`}>
-          {badge.icon && <badge.icon className="w-3 h-3" />}
-          {badge.text}
-        </div>
-      )}
-
-      {subtext && (
-        <Text className="text-[11px] text-muted-foreground/70 -mt-1">{subtext}</Text>
-      )}
+      <div className="pt-3 border-t border-border/40 mt-3 flex items-center justify-between gap-2 relative z-10">
+        {badge && (
+          <div className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badge.className}`}>
+            {badge.icon && <badge.icon className="w-3 h-3" />}
+            <span>{badge.text}</span>
+          </div>
+        )}
+        {subtext && (
+          <Text className="text-[11px] text-muted-foreground/70 truncate">{subtext}</Text>
+        )}
+      </div>
     </Box>
   );
 }
 
-// ─── Sortable Column Header ────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
-function SortHeader({ label, field, sortBy, onSort }) {
-  const isActive = sortBy.field === field;
-  return (
-    <button
-      type="button"
-      onClick={() => onSort(field)}
-      className="flex items-center gap-1 group hover:text-foreground transition-colors cursor-pointer"
-    >
-      <span>{label}</span>
-      <span className="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-        {isActive ? (
-          sortBy.dir === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
-        ) : (
-          <ChevronsUpDown className="w-3 h-3" />
-        )}
-      </span>
-    </button>
-  );
-}
-
-// ─── Booking Row ──────────────────────────────────────────────────────────────
-
-// ─── Booking Row ──────────────────────────────────────────────────────────────
-
-function BookingRow({ row, copiedId, onCopy, onPreviewSS }) {
-  const margin = row.profitMargin ?? 0;
-  const isProfit = margin > 0;
-  const isLoss = margin < 0;
-  const pct = Number(row.marginPercentage) || 0;
-  const bmsUrl = row.bookingId ? `https://friskytrails-bms.vercel.app/booking/${row.bookingId}` : null;
-
-  const marginColorClass = isProfit
-    ? 'text-emerald-400'
-    : isLoss
-      ? 'text-rose-400'
-      : 'text-slate-400';
-
-  const marginBgClass = isProfit
-    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
-    : isLoss
-      ? 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-      : 'bg-slate-500/10 border-slate-500/20 text-slate-400';
-
-  return (
-    <tr className="group border-b border-border/40 hover:bg-muted/30 transition-colors duration-150 text-xs">
-      {/* 1. Booking ID with direct BMS link */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <HStack space="xs" className="items-center">
-          {bmsUrl ? (
-            <a
-              href={bmsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all shadow-sm group/bms"
-              title={`Open ${row.bookingId} in BMS`}
-            >
-              <span>{row.bookingId}</span>
-              <ExternalLink className="w-3 h-3 transition-transform group-hover/bms:translate-x-0.5 group-hover/bms:-translate-y-0.5" />
-            </a>
-          ) : (
-            <span className="text-xs font-semibold text-orange-400">
-              {row.bookingId || '—'}
-            </span>
-          )}
-          {row.bookingId && (
-            <button
-              type="button"
-              onClick={() => onCopy(row.bookingId, `b-${row.rowKey}`)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
-              title="Copy Booking ID"
-            >
-              {copiedId === `b-${row.rowKey}` ? (
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-        </HStack>
-      </td>
-
-      {/* 2. Payment ID */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <HStack space="xs" className="items-center">
-          <span className="text-xs text-foreground font-medium tabular-nums">
-            {row.paymentId || '—'}
-          </span>
-          {row.paymentId && row.paymentId !== '—' && (
-            <button
-              type="button"
-              onClick={() => onCopy(row.paymentId, `p-${row.rowKey}`)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
-              title="Copy Payment ID"
-            >
-              {copiedId === `p-${row.rowKey}` ? (
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-        </HStack>
-      </td>
-
-      {/* 3. Settlement Channel */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-muted/80 border border-border/80 text-foreground">
-          {row.settlementChannel || '—'}
-        </span>
-      </td>
-
-      {/* 4. Txn ID */}
-      <td className="px-4 py-3.5 whitespace-nowrap">
-        <HStack space="xs" className="items-center">
-          <span className="text-xs text-muted-foreground max-w-[130px] truncate tabular-nums" title={row.txnId}>
-            {row.txnId || '—'}
-          </span>
-          {row.txnId && row.txnId !== '—' && (
-            <button
-              type="button"
-              onClick={() => onCopy(row.txnId, `t-${row.rowKey}`)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50 hover:text-muted-foreground cursor-pointer p-0.5"
-              title="Copy Txn ID"
-            >
-              {copiedId === `t-${row.rowKey}` ? (
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="w-3.5 h-3.5" />
-              )}
-            </button>
-          )}
-        </HStack>
-      </td>
-
-      {/* 5. SS (Screenshot / Proof) */}
-      <td className="px-4 py-3.5 whitespace-nowrap text-center">
-        {row.screenshot ? (
-          <button
-            type="button"
-            onClick={() => onPreviewSS(row.screenshot, `Booking ${row.bookingId} - Payment Proof`)}
-            className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-[11px] font-bold transition-all shadow-sm cursor-pointer"
-            title="Click to view Screenshot"
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <span className="text-xs text-muted-foreground/50">—</span>
-        )}
-      </td>
-
-      {/* 6. Amount (Payment Amount) */}
-      <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <span className="text-xs font-bold text-foreground tabular-nums">
-          {formatINRFull(row.amount)}
-        </span>
-      </td>
-
-      {/* 7. Payment Date */}
-      <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground tabular-nums">
-        {formatDate(row.paymentDate)}
-      </td>
-
-      {/* 8. Total Package Amount */}
-      <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <span className="text-xs font-bold text-sky-300 tabular-nums">
-          {formatINRFull(row.totalAmount)}
-        </span>
-      </td>
-
-      {/* 9. Margin (Profit / Loss Margin & Percentage) */}
-      <td className="px-4 py-3.5 whitespace-nowrap text-right">
-        <div className="flex flex-col items-end gap-0.5">
-          <span className={`text-xs font-bold tabular-nums ${marginColorClass}`}>
-            {isProfit ? '+' : ''}{formatINRFull(margin)}
-          </span>
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border tabular-nums ${marginBgClass}`}>
-            {isProfit ? <TrendingUp className="w-2.5 h-2.5" /> : isLoss ? <TrendingDown className="w-2.5 h-2.5" /> : null}
-            {isProfit ? '+' : ''}{pct.toFixed(1)}%
-          </span>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-const DEFAULT_FILTERS = {
-  status: 'Confirmed',
-  fromDate: '',
-  toDate: '',
-  serviceStartDate: '',
-  serviceEndDate: ''
-};
-
-export default function ProfitMarginPage() {
+export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYear: propYear }) {
   const navigate = useNavigate();
+  const outletCtx = useOutletContext() || {};
+  const selectedMonth = propMonth || outletCtx.selectedMonth || 10;
+  const selectedYear = propYear || outletCtx.selectedYear || 2026;
 
-  // Filters state
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const [pendingFilters, setPendingFilters] = useState(DEFAULT_FILTERS);
-
-  // Data state
+  // Status Filter: 'Confirmed' (Default) | 'ALL' | 'Cancelled'
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [summary, setSummary] = useState(null);
-  const [bookings, setBookings] = useState([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 50, totalPages: 1, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [bookingFromDate, setBookingFromDate] = useState('');
+  const [bookingToDate, setBookingToDate] = useState('');
+  const [serviceFromDate, setServiceFromDate] = useState('');
+  const [serviceToDate, setServiceToDate] = useState('');
+  const [appliedDates, setAppliedDates] = useState({ bookingFromDate: '', bookingToDate: '', serviceFromDate: '', serviceToDate: '' });
 
-  // UI state
-  const [loading, setLoading] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false);
-  const [copiedId, setCopiedId] = useState(null);
-  const [sortBy, setSortBy] = useState({ field: 'createdAt', dir: 'desc' });
+  const monthName = MONTH_NAMES[Number(selectedMonth) - 1] || `Month ${selectedMonth}`;
 
-  const [activeScreenshot, setActiveScreenshot] = useState(null);
-
-  // ── Fetch data ──
-  const fetchData = useCallback(async (overrideFilters = null, viewAll = false) => {
+  // ── Fetch summary according to Booking Date (createdAt) in selected month ──
+  const fetchMarginSummary = useCallback(async () => {
     setLoading(true);
-    const f = overrideFilters || filters;
-    const params = new URLSearchParams();
-    if (f.status && f.status !== 'ALL') params.set('status', f.status);
-    if (f.fromDate) params.set('fromDate', f.fromDate);
-    if (f.toDate) params.set('toDate', f.toDate);
-    if (f.serviceStartDate) params.set('serviceStartDate', f.serviceStartDate);
-    if (f.serviceEndDate) params.set('serviceEndDate', f.serviceEndDate);
-    if (viewAll) params.set('viewAll', 'true');
-    params.set('limit', '200');
-
     try {
+      const params = new URLSearchParams();
+      // The explicit booking date range overrides month selection on the server.
+      if (appliedDates.bookingFromDate || appliedDates.bookingToDate) {
+        if (appliedDates.bookingFromDate) params.set('fromDate', appliedDates.bookingFromDate);
+        if (appliedDates.bookingToDate) params.set('toDate', appliedDates.bookingToDate);
+      } else {
+        params.set('month', String(selectedMonth));
+        params.set('year', String(selectedYear));
+      }
+      if (appliedDates.serviceFromDate) params.set('serviceStartDate', appliedDates.serviceFromDate);
+      if (appliedDates.serviceToDate) params.set('serviceEndDate', appliedDates.serviceToDate);
+      if (statusFilter && statusFilter !== 'ALL') {
+        params.set('status', statusFilter);
+      }
+      // Only request summary data with limit=1 to save bandwidth since table entries are removed
+      params.set('limit', '1');
+
       const data = await apiFetch(`/transactions/profit-margins?${params.toString()}`);
       setSummary(data.summary || null);
-      setBookings(data.bookings || []);
-      setPagination(data.pagination || { page: 1, limit: 200, totalPages: 1, total: 0 });
-      setHasFetched(true);
     } catch (err) {
-      toast.error('Failed to load booking margins');
+      console.error('Failed to load margin data:', err);
+      toast.error('Failed to load profit and loss margins');
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [selectedMonth, selectedYear, statusFilter, appliedDates]);
 
-  // ── Handle sort ──
-  const handleSort = useCallback((field) => {
-    setSortBy(prev => ({
-      field,
-      dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc'
-    }));
-  }, []);
+  useEffect(() => {
+    fetchMarginSummary();
+  }, [fetchMarginSummary]);
 
-  // ── Flatten bookings into payment rows, then sort at payment-row level ──
-  const displayRows = useMemo(() => {
-    const list = [];
-    bookings.forEach((b) => {
-      const payments = Array.isArray(b.payments) && b.payments.length > 0 ? b.payments : [null];
-      payments.forEach((p, idx) => {
-        list.push({
-          bookingId: b.bookingId,
-          totalAmount: b.totalAmount,
-          paidAmount: b.paidAmount,
-          profitMargin: b.profitMargin,
-          marginPercentage: b.marginPercentage,
-          status: b.status,
-          createdAt: b.createdAt,
-          // Payment details:
-          paymentId: p?.paymentId || (p?._id ? String(p._id).slice(-6) : '—'),
-          settlementChannel: p?.paymentMode || '—',
-          txnId: p?.invoiceNumber || p?.details || b.transactionId || '—',
-          screenshot: p?.attachment || '',
-          screenshotName: p?.attachmentName || '',
-          amount: p?.amountPaid != null ? p.amountPaid : (b.paidAmount || 0),
-          paymentDate: p?.paymentDate || b.createdAt,
-          paymentIndex: idx,
-          paymentTotal: payments.length,
-          rowKey: `${b.bookingId}-${p?.paymentId || p?._id || idx}`
-        });
-      });
-    });
-    const dir = sortBy.dir === 'asc' ? 1 : -1;
-    const numericFields = ['amount', 'totalAmount', 'paidAmount', 'dueAmount', 'profitMargin', 'marginPercentage'];
-    const dateFields = ['createdAt', 'paymentDate', 'startDate'];
-    list.sort((a, b) => {
-      if (numericFields.includes(sortBy.field)) return dir * (Number(a[sortBy.field] || 0) - Number(b[sortBy.field] || 0));
-      if (dateFields.includes(sortBy.field)) return dir * (new Date(a[sortBy.field] || 0) - new Date(b[sortBy.field] || 0));
-      return dir * String(a[sortBy.field] || '').localeCompare(String(b[sortBy.field] || ''));
-    });
-    return list;
-  }, [bookings, sortBy]);
+  // Derived metrics
+  const totalPackageCost = summary?.totalPackageCost || 0;
+  const totalProfitMargin = summary?.totalProfitMargin || 0;
+  const totalSupplierCost = summary?.totalSupplierCost ?? Math.max(0, totalPackageCost - totalProfitMargin);
+  const totalPaidAmount = summary?.totalPaidAmount || 0;
+  const totalDueAmount = summary?.totalDueAmount || 0;
+  const totalGstAmount = summary?.totalGstAmount || 0;
+  const totalCount = summary?.totalCount || 0;
+  const overallMarginPercent = summary?.overallMarginPercent ?? (totalPackageCost > 0 ? +((totalProfitMargin / totalPackageCost) * 100).toFixed(1) : 0);
+  const isProfit = totalProfitMargin >= 0;
 
-  // ── Copy to clipboard ──
-  const handleCopy = useCallback((text, id) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopiedId(id || text);
-    toast.success(`Copied: ${text}`, { id: 'copy', duration: 1500 });
-    setTimeout(() => setCopiedId(null), 2000);
-  }, []);
+  const avgMarginPerBooking = totalCount > 0 ? Math.round(totalProfitMargin / totalCount) : 0;
+  const supplierCostRatio = totalPackageCost > 0 ? Math.round((totalSupplierCost / totalPackageCost) * 100) : 0;
+  const collectionRatio = totalPackageCost > 0 ? Math.round((totalPaidAmount / totalPackageCost) * 100) : 0;
+  const dueRatio = totalPackageCost > 0 ? Math.round((totalDueAmount / totalPackageCost) * 100) : 0;
 
-  // ── Filter input change ──
-  const handleChange = (key, val) => {
-    setPendingFilters(prev => ({ ...prev, [key]: val }));
-  };
-
-  const handleGetData = () => {
-    setFilters(pendingFilters);
-    fetchData(pendingFilters, false);
-  };
-
-  const handleViewAll = () => {
-    const f = {
-      ...pendingFilters,
-      fromDate: '',
-      toDate: '',
-      serviceStartDate: '',
-      serviceEndDate: ''
-    };
-    setPendingFilters(f);
-    setFilters(f);
-    fetchData(f, true);
-  };
-
-  const handleReset = () => {
-    setPendingFilters(DEFAULT_FILTERS);
-    setFilters(DEFAULT_FILTERS);
-    setSummary(null);
-    setBookings([]);
-    setHasFetched(false);
-  };
-
-  // ── CSV Export ──
-  const exportCSV = () => {
-    if (!displayRows.length) return;
-    const headers = [
-      'Booking ID',
-      'Payment ID',
-      'Settlement Channel',
-      'Txn ID',
-      'SS Link',
-      'Payment Amount (₹)',
-      'Payment Date',
-      'Total Package Amount (₹)',
-      'Margin (₹)',
-      'Margin %'
-    ];
-    const rows = displayRows.map(r => [
-      r.bookingId || '',
-      r.paymentId || '',
-      r.settlementChannel || '',
-      r.txnId || '',
-      r.screenshot || '',
-      r.amount || 0,
-      formatDate(r.paymentDate),
-      r.totalAmount || 0,
-      r.profitMargin || 0,
-      Number(r.marginPercentage || 0).toFixed(2) + '%'
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `profit-margin-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('CSV exported!');
-  };
-
-  // ─── KPI Card Configs ────────────────────────────────────────────────────────
-
-  const overallPct = summary?.overallMarginPercent ?? 0;
-  const isOverallProfit = overallPct >= 0;
-
-  const kpiCards = summary ? [
-    {
-      label: 'Total Package Cost',
-      value: summary.totalPackageCost,
-      icon: Package,
-      colorClass: 'text-orange-400',
-      bgGlow: 'bg-orange-500',
-      subtext: `Across ${summary.totalCount} booking${summary.totalCount !== 1 ? 's' : ''}`
-    },
-    {
-      label: 'Total Margin',
-      value: summary.totalProfitMargin,
-      icon: isOverallProfit ? TrendingUp : TrendingDown,
-      colorClass: isOverallProfit ? 'text-emerald-400' : 'text-rose-400',
-      bgGlow: isOverallProfit ? 'bg-emerald-500' : 'bg-rose-500',
-      badge: {
-        text: `${isOverallProfit ? '+' : ''}${overallPct.toFixed(1)}% Overall Margin`,
-        icon: Percent,
-        className: isOverallProfit
-          ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
-          : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
-      },
-      subtext: 'Net profit after supplier B2B cost'
-    },
-    {
-      label: 'GST Amount',
-      value: summary.totalGstAmount || 0,
-      icon: BadgeIndianRupee,
-      colorClass: 'text-sky-400',
-      bgGlow: 'bg-sky-500',
-      subtext: 'Applicable tax & GST component'
-    }
-  ] : [];
-
-  // ─── Render ───────────────────────────────────────────────────────────────────
+  const profitableCount = summary?.profitableCount || 0;
+  const lossCount = summary?.lossCount || 0;
+  const breakEvenCount = summary?.breakEvenCount || Math.max(0, totalCount - profitableCount - lossCount);
 
   return (
-    <Box className="space-y-7">
-      {/* ── Page Header ── */}
-      <HStack className="items-center justify-between">
-        <HStack space="md" className="items-center">
-          <button
-            type="button"
-            onClick={() => navigate('/')}
-            className="w-9 h-9 rounded-xl border border-border/60 bg-card/80 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border transition-all cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <VStack space="2xs">
-            <Heading size="lg" bold className="text-foreground tracking-tight text-xl flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
-                <TrendingUp className="w-4 h-4 text-white" />
-              </span>
-              Profit &amp; Loss Margin Ledger
-            </Heading>
-            <Text className="text-xs text-muted-foreground/80">
-              Booking-level profit, margin %, and financial performance overview
-            </Text>
-          </VStack>
-        </HStack>
+    <Box className="w-full max-w-[1680px] mx-auto space-y-7 pb-20">
+      {/* ── TOP EXECUTIVE BANNER ── */}
+      <div className="rounded-2xl border border-border/80 bg-card/90 backdrop-blur-xl p-6 shadow-xl relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
 
-        {hasFetched && bookings.length > 0 && (
-          <button
-            type="button"
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border/60 bg-card/80 text-muted-foreground hover:text-foreground hover:border-border text-xs font-semibold transition-all cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export CSV
-          </button>
-        )}
-      </HStack>
-
-      {/* ── Filter Card ── */}
-      <Box className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl p-6 shadow-xl glow-card">
-        {/* Header */}
-        <HStack space="sm" className="items-center mb-5">
-          <div className="w-7 h-7 rounded-lg bg-orange-500/15 border border-orange-500/25 flex items-center justify-center">
-            <Filter className="w-3.5 h-3.5 text-orange-400" />
-          </div>
-          <Text className="text-sm font-bold text-foreground/90">Find Bookings</Text>
-          <Text className="text-xs text-muted-foreground/60">(Fill any filter to search)</Text>
-        </HStack>
-
-        {/* Row 1: Booking Status | Booking Date From | Booking Date To */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Status</label>
-            <select
-              id="filter-status"
-              value={pendingFilters.status}
-              onChange={e => handleChange('status', e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all cursor-pointer appearance-none"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </VStack>
-
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Date (From)</label>
-            <input
-              id="filter-from-date"
-              type="date"
-              value={pendingFilters.fromDate}
-              onChange={e => handleChange('fromDate', e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
-            />
-          </VStack>
-
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Booking Date (To)</label>
-            <input
-              id="filter-to-date"
-              type="date"
-              value={pendingFilters.toDate}
-              onChange={e => handleChange('toDate', e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
-            />
-          </VStack>
-        </div>
-
-        {/* Row 2: Service Start Date | Service End Date */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Service Start Date</label>
-            <input
-              id="filter-service-start"
-              type="date"
-              value={pendingFilters.serviceStartDate}
-              onChange={e => handleChange('serviceStartDate', e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
-            />
-          </VStack>
-
-          <VStack space="xs">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/70">Service End Date</label>
-            <input
-              id="filter-service-end"
-              type="date"
-              value={pendingFilters.serviceEndDate}
-              onChange={e => handleChange('serviceEndDate', e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-muted/50 border border-border/60 text-foreground text-sm focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30 transition-all [color-scheme:dark]"
-            />
-          </VStack>
-        </div>
-
-        {/* Actions row */}
-        <HStack className="items-center justify-between">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-xs text-orange-400 hover:text-orange-300 font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset Filters
-          </button>
-
-          <HStack space="sm" className="items-center">
-            <button
-              id="btn-view-all"
-              type="button"
-              onClick={handleViewAll}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border/70 bg-muted/50 text-foreground text-xs font-bold hover:bg-muted hover:border-border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              View All
-            </button>
-
-            <button
-              id="btn-get-data"
-              type="button"
-              onClick={handleGetData}
-              disabled={loading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-amber-500 text-white text-xs font-black shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed active:scale-95"
-            >
-              {loading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Search className="w-3.5 h-3.5" />
-              )}
-              {loading ? 'Loading...' : 'Get Data'}
-            </button>
-          </HStack>
-        </HStack>
-      </Box>
-
-      {/* ── KPI Summary Cards ── */}
-      {hasFetched && summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {kpiCards.map((card) => (
-            <KpiCard key={card.label} {...card} />
-          ))}
-        </div>
-      )}
-
-      {/* ── Bookings Table ── */}
-      {hasFetched && (
-        <Box className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-xl glow-card overflow-hidden">
-          {/* Table Header */}
-          <HStack className="items-center justify-between px-5 py-4 border-b border-border/50">
-            <HStack space="sm" className="items-center">
-              <Package className="w-4 h-4 text-muted-foreground" />
-              <Text className="text-sm font-bold text-foreground">
-                Booking Margins
-              </Text>
-              {summary && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20">
-                  {pagination.total} records
-                </span>
-              )}
-            </HStack>
-            <Text className="text-[11px] text-muted-foreground/60">
-              Click column headers to sort
-            </Text>
-          </HStack>
-
-          {/* Loading state */}
-          {loading && (
-            <div className="flex items-center justify-center py-20 gap-3">
-              <RefreshCw className="w-5 h-5 text-primary animate-spin" />
-              <Text className="text-sm text-muted-foreground">Fetching booking data...</Text>
-            </div>
-          )}
-
-          {/* Empty state */}
-          {!loading && bookings.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
-              <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center">
-                <BadgeIndianRupee className="w-7 h-7 text-muted-foreground/50" />
-              </div>
-              <VStack space="2xs" className="items-center">
-                <Text className="text-sm font-bold text-foreground/60">No bookings found</Text>
-                <Text className="text-xs text-muted-foreground/50">Try adjusting your filters or click "View All"</Text>
-              </VStack>
-            </div>
-          )}
-
-          {/* Table */}
-          {!loading && displayRows.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left min-w-[980px]">
-                <thead>
-                  <tr className="border-b border-border/50 bg-muted/20">
-                    {[
-                      { label: 'Booking ID', field: 'bookingId' },
-                      { label: 'Payment ID', field: 'paymentId' },
-                      { label: 'Settlement Channel', field: 'settlementChannel' },
-                      { label: 'Txn ID', field: 'txnId' },
-                      { label: 'Screenshot', field: null, align: 'center' },
-                      { label: 'Amount', field: 'amount', align: 'right' },
-                      { label: 'Payment Date', field: 'paymentDate' },
-                      { label: 'Total Package Amount', field: 'totalAmount', align: 'right' },
-                      { label: 'Margin', field: 'profitMargin', align: 'right' },
-                    ].map(col => (
-                      <th
-                        key={col.label}
-                        className={`px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-muted-foreground/70 whitespace-nowrap ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
-                      >
-                        {col.field ? (
-                          <SortHeader label={col.label} field={col.field} sortBy={sortBy} onSort={handleSort} />
-                        ) : (
-                          col.label
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayRows.map((row) => (
-                    <BookingRow
-                      key={row.rowKey}
-                      row={row}
-                      copiedId={copiedId}
-                      onCopy={handleCopy}
-                      onPreviewSS={(url, title) => setActiveScreenshot({ url, title })}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination hint */}
-          {!loading && pagination.total > pagination.limit && (
-            <div className="px-5 py-3 border-t border-border/40 flex items-center justify-between">
-              <Text className="text-xs text-muted-foreground/60">
-                Showing {displayRows.length} payment records across {bookings.length} bookings
-              </Text>
-              <Text className="text-xs text-muted-foreground/50">
-                Increase limit or apply filters to narrow results
-              </Text>
-            </div>
-          )}
-        </Box>
-      )}
-
-      {/* ── Initial empty state ── */}
-      {!hasFetched && !loading && (
-        <Box className="rounded-2xl border border-dashed border-border/40 bg-card/40 p-16 flex flex-col items-center gap-4 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center">
-            <TrendingUp className="w-8 h-8 text-emerald-400/70" />
-          </div>
-          <VStack space="xs" className="items-center">
-            <Heading size="md" bold className="text-foreground/70">
-              Profit &amp; Loss Ledger
-            </Heading>
-            <Text className="text-sm text-muted-foreground/60 max-w-sm">
-              Apply filters above and click <strong className="text-orange-400">"Get Data"</strong> to load booking margins, or click <strong className="text-foreground/80">"View All"</strong> to see all bookings.
-            </Text>
-          </VStack>
-        </Box>
-      )}
-
-      {/* ── Screenshot Preview Modal ── */}
-      {activeScreenshot && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setActiveScreenshot(null)}
-        >
-          <div
-            className="relative max-w-4xl max-h-[90vh] bg-card border border-border/80 rounded-2xl p-4 shadow-2xl overflow-hidden flex flex-col items-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full flex items-center justify-between pb-3 mb-3 border-b border-border/60">
-              <span className="text-xs font-bold text-foreground truncate max-w-md">
-                {activeScreenshot.title || 'Payment Screenshot Proof'}
-              </span>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+          {/* Left: Navigation, Title & Scope */}
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setActiveScreenshot(null)}
-                className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={() => navigate('/')}
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted border border-border/60 transition-all cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <ArrowLeft className="w-3.5 h-3.5 text-primary" />
+                <span>Dashboard</span>
               </button>
+
+              <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{bookingFromDate || bookingToDate ? 'Booking Date Range' : `Booking Date Filter: ${monthName} ${selectedYear}`}</span>
+              </div>
             </div>
-            <img
-              src={activeScreenshot.url}
-              alt="Payment Screenshot Proof"
-              className="max-h-[72vh] w-auto object-contain rounded-lg shadow-md"
-            />
-            <div className="w-full flex justify-end gap-2 pt-3 mt-3 border-t border-border/60">
-              <a
-                href={activeScreenshot.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary text-xs font-bold hover:bg-primary/30 transition-all cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Full Size</span>
-              </a>
+
+            <div>
+              <Heading size="lg" bold className="text-2xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-3">
+                <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20">
+                  <TrendingUp className="w-4.5 h-4.5 text-white" />
+                </span>
+                Profit &amp; Loss Margin Summary
+              </Heading>
+              <Text className="text-xs text-muted-foreground/80 mt-1">
+                Aggregated profit, package revenue, and supplier obligations for the selected booking and service dates
+              </Text>
             </div>
           </div>
+
+          {/* Right: Status Filter & Refresh */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Status Segmented Control */}
+            <div className="inline-flex p-1 bg-muted/50 border border-border/70 rounded-xl gap-1">
+              {[
+                { label: 'Confirmed', value: 'Confirmed' },
+                { label: 'All Statuses', value: 'ALL' },
+                { label: 'Cancelled', value: 'Cancelled' }
+              ].map((st) => (
+                <button
+                  key={st.value}
+                  type="button"
+                  onClick={() => setStatusFilter(st.value)}
+                  className={`py-1.5 px-3.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    statusFilter === st.value
+                      ? 'bg-card text-foreground font-bold shadow-sm border border-border/80'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={fetchMarginSummary}
+              disabled={loading}
+              className="p-2.5 rounded-xl border border-border/70 bg-card hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-sm disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-primary' : ''}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <Box className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-lg">
+        <div className="flex flex-col gap-4">
+          <div>
+            <Heading size="sm" bold className="text-base">Filter by dates</Heading>
+            <Text className="text-xs text-muted-foreground mt-1">Choose booking dates, service dates, or use the month selector.</Text>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[['Booking from', bookingFromDate, setBookingFromDate], ['Booking to', bookingToDate, setBookingToDate], ['Service from', serviceFromDate, setServiceFromDate], ['Service to', serviceToDate, setServiceToDate]].map(([label, value, setter]) => (
+              <label key={label} className="space-y-1.5 text-xs font-semibold text-muted-foreground">
+                <span>{label}</span>
+                <input type="date" value={value} onChange={(event) => setter(event.target.value)} className="w-full rounded-lg border border-border/70 bg-background px-3 py-2.5 text-sm text-foreground" />
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setAppliedDates({ bookingFromDate, bookingToDate, serviceFromDate, serviceToDate })} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50">Apply filters</button>
+            {(bookingFromDate || bookingToDate || serviceFromDate || serviceToDate || appliedDates.bookingFromDate || appliedDates.bookingToDate || appliedDates.serviceFromDate || appliedDates.serviceToDate) && (
+              <button type="button" onClick={() => { setBookingFromDate(''); setBookingToDate(''); setServiceFromDate(''); setServiceToDate(''); setAppliedDates({ bookingFromDate: '', bookingToDate: '', serviceFromDate: '', serviceToDate: '' }); }} className="text-xs font-semibold text-primary hover:underline">Clear date filters</button>
+            )}
+          </div>
+        </div>
+      </Box>
+
+      {/* ── KPI CARDS GRID ── */}
+      {loading && !summary ? (
+        <div className="p-20 rounded-2xl border border-border/60 bg-card/80 flex flex-col items-center justify-center space-y-3">
+          <RefreshCw className="w-7 h-7 text-primary animate-spin" />
+          <Text className="text-sm font-medium text-muted-foreground">Calculating booking margins for {monthName} {selectedYear}...</Text>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
+          {/* 1. Total Package Cost */}
+          <KpiCard
+            label="Total Package Cost"
+            value={totalPackageCost}
+            icon={Package}
+            colorClass="text-orange-400"
+            bgGlow="bg-orange-500"
+            badge={{
+              text: `${totalCount} Bookings`,
+              icon: Package,
+              className: 'bg-orange-500/10 border-orange-500/25 text-orange-400'
+            }}
+            subtext={`Gross package value for ${monthName} ${selectedYear}`}
+          />
+
+          {/* 2. Total Margin */}
+          <KpiCard
+            label="Total Margin"
+            value={totalProfitMargin}
+            icon={isProfit ? TrendingUp : TrendingDown}
+            colorClass={isProfit ? 'text-emerald-400' : 'text-rose-400'}
+            bgGlow={isProfit ? 'bg-emerald-500' : 'bg-rose-500'}
+            badge={{
+              text: `${isProfit ? '+' : ''}${overallMarginPercent}% Margin`,
+              icon: Percent,
+              className: isProfit
+                ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+            }}
+            subtext="Net profit earnings after vendor costs"
+          />
+
+          {/* 3. GST */}
+          <KpiCard
+            label="GST"
+            value={totalGstAmount}
+            icon={BadgeIndianRupee}
+            colorClass="text-sky-400"
+            bgGlow="bg-sky-500"
+            badge={{
+              text: 'Tax Component',
+              icon: BadgeIndianRupee,
+              className: 'bg-sky-500/10 border-sky-500/25 text-sky-400'
+            }}
+            subtext={`GST liability for ${monthName} ${selectedYear}`}
+          />
         </div>
       )}
     </Box>

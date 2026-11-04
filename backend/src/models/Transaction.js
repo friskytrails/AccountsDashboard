@@ -23,7 +23,7 @@ const TransactionSchema = new mongoose.Schema({
       'COMPANY_TO_SUPPLIER',
       'COMPANY_TO_TRAVELLER'
     ],
-    default: 'TRAVELLER_TO_COMPANY'
+    default: undefined
   },
   amount: {
     type: Number,

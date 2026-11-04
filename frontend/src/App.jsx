@@ -65,7 +65,10 @@ function AppRoutes() {
         <Route
           path="/profit-margin"
           element={
-            <ProfitMarginPage />
+            <ProfitMarginPage
+              selectedMonth={selectedMonth}
+              selectedYear={selectedYear}
+            />
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

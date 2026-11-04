@@ -43,9 +43,7 @@ import {
   SelectItem,
   Box,
   VStack,
-  HStack,
-  Badge,
-  BadgeText
+  HStack
 } from '@/components/ui';
 
 const CATEGORIES = [
@@ -74,6 +72,7 @@ export default function AddTransactionModal({
   initialType = 'OUTFLOW'
 }) {
   const [type, setType] = useState(initialType);
+  const [flowDirection, setFlowDirection] = useState('TRAVELLER_TO_COMPANY');
   const [category, setCategory] = useState('STAFF_SALARIES');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
@@ -90,8 +89,10 @@ export default function AddTransactionModal({
     if (isOpen) {
       setType(initialType || 'OUTFLOW');
       if (initialType === 'INFLOW') {
+        setFlowDirection('TRAVELLER_TO_COMPANY');
         setCategory('TRAVELLER_TO_COMPANY');
       } else {
+        setFlowDirection('');
         setCategory('STAFF_SALARIES');
       }
       setScreenshot('');
@@ -109,11 +110,15 @@ export default function AddTransactionModal({
     }
   }, [isOpen, selectedMonth, selectedYear, initialType]);
 
-  // Sync category when type toggles
+  // Sync flowDirection when type toggles
   useEffect(() => {
     if (type === 'INFLOW') {
+      if (flowDirection !== 'TRAVELLER_TO_COMPANY' && flowDirection !== 'SUPPLIER_TO_COMPANY') {
+        setFlowDirection('TRAVELLER_TO_COMPANY');
+      }
       setCategory('TRAVELLER_TO_COMPANY');
     } else {
+      setFlowDirection('');
       setCategory('STAFF_SALARIES');
     }
   }, [type]);
@@ -223,14 +228,13 @@ export default function AddTransactionModal({
 
     setSubmitting(true);
     try {
-      const finalCategory = type === 'INFLOW' ? 'TRAVELLER_TO_COMPANY' : category;
-      const flowDirection = type === 'INFLOW' ? 'TRAVELLER_TO_COMPANY' : 'COMPANY_TO_SUPPLIER';
+      const finalCategory = type === 'INFLOW' ? flowDirection : category;
 
       await apiFetch('/transactions', {
         method: 'POST',
         body: JSON.stringify({
           type,
-          flowDirection,
+          ...(type === 'INFLOW' ? { flowDirection } : {}),
           category: finalCategory,
           amount: parsedAmount,
           date,
@@ -242,7 +246,7 @@ export default function AddTransactionModal({
       });
 
       toast.success(
-        `${type === 'INFLOW' ? 'Inflow' : `Expense (${selectedCategoryObj?.label || category})`} recorded successfully!`
+        `${type === 'INFLOW' ? 'Inflow' : 'Manual outflow'} recorded successfully!`
       );
       setAmount('');
       setDescription('');
@@ -355,11 +359,11 @@ export default function AddTransactionModal({
                 </Box>
               </HStack>
 
-              {/* Category for Outflow */}
+              {/* Operating Category for manual outflows */}
               {type === 'OUTFLOW' && (
-                <FormControl isRequired>
+                <FormControl>
                   <FormControlLabel>
-                    <FormControlLabelText>Category *</FormControlLabelText>
+                    <FormControlLabelText>Operating Category</FormControlLabelText>
                   </FormControlLabel>
                   <Select
                     selectedValue={selectedCategoryObj?.label}

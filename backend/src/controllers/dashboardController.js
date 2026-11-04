@@ -93,6 +93,8 @@ async function getBookingSupplierOutflows(startDate, endDate, account = null) {
   const bookingsCollection = db.collection('bookings');
 
   const matchConditions = [
+    { 'services.payments.paymentFrom': 'Company' },
+    { 'services.payments.paymentTo': { $in: ['Supplier', 'Traveller', 'Traveler'] } },
     {
       'services.payments.paymentDateObj': { $gte: startDate, $lte: endDate }
     },
@@ -310,6 +312,8 @@ async function getPriorCumulativeNet(beforeDate, account = null) {
 
     // Prior supplier outflows from ft_booking_system
     const supplierMatchConditions = [
+      { 'services.payments.paymentFrom': 'Company' },
+      { 'services.payments.paymentTo': { $in: ['Supplier', 'Traveller', 'Traveler'] } },
       {
         'services.payments.paymentDateObj': { $lt: beforeDate }
       },

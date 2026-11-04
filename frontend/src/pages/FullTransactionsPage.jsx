@@ -30,7 +30,7 @@ import {
 import { apiFetch } from '../utils/api';
 import toast from 'react-hot-toast';
 
-// Settlement channels configured in treasury - strictly the 6 Accounts
+// Settlement channels configured in treasury - strictly the 6 Accounts + Cash & Other
 const SETTLEMENT_CHANNELS = [
   'All Channels',
   'Kalpana BOI',
@@ -38,7 +38,21 @@ const SETTLEMENT_CHANNELS = [
   'Babita AU',
   'Hari Mohan BOB',
   'FT HDFC',
-  'Pratyush SBI'
+  'Pratyush SBI',
+  'Cash',
+  'Other'
+];
+
+const OUTFLOW_CHANNELS = SETTLEMENT_CHANNELS;
+
+const KNOWN_ACCOUNTS = [
+  'Kalpana BOI',
+  'Kalpana PNB',
+  'Babita AU',
+  'Hari Mohan BOB',
+  'FT HDFC',
+  'Pratyush SBI',
+  'Cash'
 ];
 
 function formatDate(dateStr) {
@@ -59,7 +73,29 @@ function normalizeMode(mode) {
   if (lower.includes('hdfc')) return 'FT HDFC';
   if (lower.includes('pratyush') || lower.includes('sbi')) return 'Pratyush SBI';
   if (lower.includes('cash')) return 'Cash';
+  if (lower === 'account') return 'Other';
   return m;
+}
+
+function resolveAccount(mode) {
+  const norm = normalizeMode(mode);
+  if (KNOWN_ACCOUNTS.includes(norm)) return norm;
+  return 'Other';
+}
+
+function formatNetINR(amount) {
+  const n = Math.round(Number(amount) || 0);
+  const formatted = Math.abs(n).toLocaleString('en-IN');
+  if (n > 0) return `+₹${formatted}`;
+  if (n < 0) return `-₹${formatted}`;
+  return `₹0`;
+}
+
+function formatKiloINR(amount) {
+  const n = Math.round(Number(amount) || 0);
+  const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+  const k = Math.round(Math.abs(n) / 1000);
+  return `${sign}₹${k}k`;
 }
 
 const MONTH_NAMES = [
@@ -79,6 +115,8 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
   const [timeScope, setTimeScope] = useState('MONTH');
   // Selected payment mode channel
   const [selectedChannel, setSelectedChannel] = useState('All Channels');
+  // Inflow flow classification filter: 'ALL' | 'TRAVELLER_TO_COMPANY' | 'SUPPLIER_TO_COMPANY' | 'MANUAL'
+  const [inflowFlowFilter, setInflowFlowFilter] = useState('ALL');
   // Search query
   const [searchQuery, setSearchQuery] = useState('');
   // Sort field: 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc' | 'name_asc'
@@ -208,39 +246,131 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       + manualOutflows.filter((t) => matchesSelectedMonth(t.date)).length;
   }, [outflows, manualTx, timeScope, selectedMonth, selectedYear]);
 
-  // 1. Channel stats with counts and sums for Leads (Customer Inflows)
-  const channelStats = useMemo(() => {
-    const stats = {};
+  // 1. Unified Account Metrics (Inflow, Outflow, Net Volume = Inflow - Outflow)
+  const accountMetrics = useMemo(() => {
+    const map = {};
     SETTLEMENT_CHANNELS.forEach((ch) => {
-      stats[ch] = { count: 0, totalAmount: 0 };
+      map[ch] = {
+        inflowCount: 0,
+        inflowAmount: 0,
+        outflowCount: 0,
+        outflowAmount: 0,
+        netVolume: 0,
+        toSupplierAmount: 0,
+        toSupplierCount: 0,
+        toTravellerAmount: 0,
+        toTravellerCount: 0
+      };
     });
-    // Always ensure 'Other' bucket exists even if not in SETTLEMENT_CHANNELS
-    if (!stats['Other']) {
-      stats['Other'] = { count: 0, totalAmount: 0 };
-    }
 
+    // Scoped Inflows (Live BMS Inflows + Manual Inflow Transactions)
     const scopedInflows = timeScope === 'MONTH'
       ? inflows.filter((item) => matchesSelectedMonth(item.paymentDate))
       : inflows;
+    const scopedManualInflows = timeScope === 'MONTH'
+      ? manualTx.filter((t) => t.type === 'INFLOW' && matchesSelectedMonth(t.date))
+      : manualTx.filter((t) => t.type === 'INFLOW');
 
-    scopedInflows.forEach((item) => {
-      const norm = normalizeMode(item.paymentMode);
-      const amt = Number(item.amountPaid || 0);
+    const allInflowList = [
+      ...scopedInflows.map((b) => ({ paymentMode: b.paymentMode, amount: Number(b.amountPaid || 0) })),
+      ...scopedManualInflows.map((m) => ({ paymentMode: m.paymentMode, amount: Number(m.amount || 0) }))
+    ];
 
-      stats['All Channels'].count += 1;
-      stats['All Channels'].totalAmount += amt;
+    allInflowList.forEach((item) => {
+      const acct = resolveAccount(item.paymentMode);
+      const amt = item.amount;
 
-      if (stats[norm]) {
-        stats[norm].count += 1;
-        stats[norm].totalAmount += amt;
+      map['All Channels'].inflowCount += 1;
+      map['All Channels'].inflowAmount += amt;
+
+      const targetKey = map[acct] ? acct : 'Other';
+      map[targetKey].inflowCount += 1;
+      map[targetKey].inflowAmount += amt;
+    });
+
+    // Scoped Outflows (Live BMS Supplier Outflows + Manual Outflow Transactions)
+    const scopedOutflows = timeScope === 'MONTH'
+      ? outflows.filter((item) => matchesSelectedMonth(item.date))
+      : outflows;
+    const scopedManualOutflows = timeScope === 'MONTH'
+      ? manualTx.filter((t) => t.type === 'OUTFLOW' && matchesSelectedMonth(t.date))
+      : manualTx.filter((t) => t.type === 'OUTFLOW');
+
+    const allOutflowList = [
+      ...scopedOutflows.map((s) => ({
+        paymentMode: s.paymentMode,
+        amount: Number(s.amount || 0),
+        flowDirection: 'COMPANY_TO_SUPPLIER'
+      })),
+      ...scopedManualOutflows.map((m) => ({
+        paymentMode: m.paymentMode,
+        amount: Number(m.amount || 0),
+        flowDirection: m.flowDirection || (m.category === 'COMPANY_TO_TRAVELLER' ? 'COMPANY_TO_TRAVELLER' : 'COMPANY_TO_SUPPLIER')
+      }))
+    ];
+
+    allOutflowList.forEach((item) => {
+      const acct = resolveAccount(item.paymentMode);
+      const amt = item.amount;
+
+      map['All Channels'].outflowCount += 1;
+      map['All Channels'].outflowAmount += amt;
+
+      if (item.flowDirection === 'COMPANY_TO_TRAVELLER') {
+        map['All Channels'].toTravellerCount += 1;
+        map['All Channels'].toTravellerAmount += amt;
       } else {
-        stats['Other'].count += 1;
-        stats['Other'].totalAmount += amt;
+        map['All Channels'].toSupplierCount += 1;
+        map['All Channels'].toSupplierAmount += amt;
+      }
+
+      const targetKey = map[acct] ? acct : 'Other';
+      map[targetKey].outflowCount += 1;
+      map[targetKey].outflowAmount += amt;
+
+      if (item.flowDirection === 'COMPANY_TO_TRAVELLER') {
+        map[targetKey].toTravellerCount += 1;
+        map[targetKey].toTravellerAmount += amt;
+      } else {
+        map[targetKey].toSupplierCount += 1;
+        map[targetKey].toSupplierAmount += amt;
       }
     });
 
+    // Net Volume = Inflow - Outflow for each account & overall
+    SETTLEMENT_CHANNELS.forEach((ch) => {
+      map[ch].netVolume = map[ch].inflowAmount - map[ch].outflowAmount;
+    });
+
+    return map;
+  }, [inflows, outflows, manualTx, timeScope, selectedMonth, selectedYear]);
+
+  // Backward compatibility aliases
+  const channelStats = useMemo(() => {
+    const stats = {};
+    SETTLEMENT_CHANNELS.forEach((ch) => {
+      stats[ch] = {
+        count: accountMetrics[ch]?.inflowCount || 0,
+        totalAmount: accountMetrics[ch]?.inflowAmount || 0,
+        netVolume: accountMetrics[ch]?.netVolume || 0
+      };
+    });
     return stats;
-  }, [inflows, timeScope, selectedMonth, selectedYear]);
+  }, [accountMetrics]);
+
+  const outflowChannelStats = useMemo(() => {
+    const stats = {};
+    OUTFLOW_CHANNELS.forEach((ch) => {
+      stats[ch] = {
+        count: accountMetrics[ch]?.outflowCount || 0,
+        totalAmount: accountMetrics[ch]?.outflowAmount || 0,
+        netVolume: accountMetrics[ch]?.netVolume || 0
+      };
+    });
+    return stats;
+  }, [accountMetrics]);
+
+  const activeAccountMetrics = accountMetrics[selectedChannel] || accountMetrics['All Channels'];
 
   // 2. Filtered & Sorted Bookings
   const filteredBookings = useMemo(() => {
@@ -252,11 +382,8 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
       // Channel filter
       if (selectedChannel !== 'All Channels') {
-        const norm = normalizeMode(b.paymentMode);
-        if (selectedChannel === 'Other') {
-          const isStandard = SETTLEMENT_CHANNELS.slice(1, -1).includes(norm);
-          if (isStandard) return false;
-        } else if (norm !== selectedChannel) {
+        const norm = resolveAccount(b.paymentMode);
+        if (norm !== selectedChannel) {
           return false;
         }
       }
@@ -312,7 +439,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
         return false;
       }
       if (selectedChannel !== 'All Channels') {
-        const norm = normalizeMode(t.paymentMode);
+        const norm = resolveAccount(t.paymentMode);
         if (norm !== selectedChannel) return false;
       }
       if (searchQuery.trim()) {
@@ -328,18 +455,36 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
   }, [manualTx, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
   const mergedInflows = useMemo(() => {
-    const manualInflows = filteredManual
+    // BMS booking payments = Traveller to Company (status VERIFIED/PAID, already filtered by backend)
+    const bmsRows = filteredBookings.map((b) => ({
+      ...b,
+      _rowKey: `bms-${b._id || b.paymentId}`,
+      flowDirection: 'TRAVELLER_TO_COMPANY',
+      _isManual: false,
+    }));
+
+    // Manual inflows: Supplier to Company OR general Manual
+    const manualInflowRows = filteredManual
       .filter((t) => t.type === 'INFLOW')
-      .map((t) => ({
-        ...t,
-        _id: `manual-${t._id}`,
-        paymentId: t.referenceNumber || '—',
-        paymentDate: t.date,
-        amountPaid: t.amount,
-        attachment: '',
-        screenshotTransactionId: t.hasScreenshot ? t._id : null
-      }));
-    const rows = [...filteredBookings, ...manualInflows];
+      .map((t) => {
+        const flow = t.flowDirection === 'SUPPLIER_TO_COMPANY' || t.category === 'SUPPLIER_TO_COMPANY'
+          ? 'SUPPLIER_TO_COMPANY'
+          : 'MANUAL';
+        return {
+          ...t,
+          _rowKey: `manual-${t._id}`,
+          _id: `manual-${t._id}`,
+          paymentId: t.referenceNumber || '—',
+          paymentDate: t.date,
+          amountPaid: t.amount,
+          attachment: '',
+          screenshotTransactionId: t.hasScreenshot ? t._id : null,
+          flowDirection: flow,
+          _isManual: true,
+        };
+      });
+
+    const rows = [...bmsRows, ...manualInflowRows];
     rows.sort((a, b) => {
       if (sortBy === 'date_desc') return new Date(b.paymentDate) - new Date(a.paymentDate);
       if (sortBy === 'date_asc') return new Date(a.paymentDate) - new Date(b.paymentDate);
@@ -351,11 +496,50 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     return rows;
   }, [filteredBookings, filteredManual, sortBy]);
 
+  // Inflow metrics by flow type
+  const inflowMetrics = useMemo(() => {
+    let travellerToCompanyTotal = 0, travellerToCompanyCount = 0;
+    let supplierToCompanyTotal = 0, supplierToCompanyCount = 0;
+    let manualTotal = 0, manualCount = 0;
+
+    mergedInflows.forEach((row) => {
+      const amt = Number(row.amountPaid || 0);
+      if (row.flowDirection === 'TRAVELLER_TO_COMPANY') {
+        travellerToCompanyTotal += amt;
+        travellerToCompanyCount += 1;
+      } else if (row.flowDirection === 'SUPPLIER_TO_COMPANY') {
+        supplierToCompanyTotal += amt;
+        supplierToCompanyCount += 1;
+      } else {
+        manualTotal += amt;
+        manualCount += 1;
+      }
+    });
+
+    return {
+      totalAmount: travellerToCompanyTotal + supplierToCompanyTotal + manualTotal,
+      totalCount: mergedInflows.length,
+      travellerToCompanyTotal, travellerToCompanyCount,
+      supplierToCompanyTotal, supplierToCompanyCount,
+      manualTotal, manualCount,
+    };
+  }, [mergedInflows]);
+
+  // Rows visible after the inflow flow filter
+  const displayedInflowRows = useMemo(() => {
+    if (inflowFlowFilter === 'ALL') return mergedInflows;
+    return mergedInflows.filter((r) => r.flowDirection === inflowFlowFilter);
+  }, [mergedInflows, inflowFlowFilter]);
+
   // 4. Filtered Suppliers
   const filteredSuppliers = useMemo(() => {
     return outflows.filter((s) => {
       if (timeScope === 'MONTH' && !matchesSelectedMonth(s.date)) {
         return false;
+      }
+      if (selectedChannel !== 'All Channels') {
+        const norm = resolveAccount(s.paymentMode);
+        if (norm !== selectedChannel) return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -365,14 +549,63 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
         const city = (s.city || '').toLowerCase();
         const paymentId = (s.paymentId || '').toString().toLowerCase();
         const category = (s.category || '').toLowerCase();
-        return name.includes(q) || id.includes(q) || bId.includes(q) || city.includes(q) || paymentId.includes(q) || category.includes(q);
+        const mode = (s.paymentMode || '').toLowerCase();
+        return name.includes(q) || id.includes(q) || bId.includes(q) || city.includes(q) || paymentId.includes(q) || category.includes(q) || mode.includes(q);
       }
       return true;
     });
   }, [outflows, timeScope, selectedMonth, selectedYear, selectedChannel, searchQuery]);
 
+  // 5. Merged supplier payments and manual outflows
+  const allOutflowRows = useMemo(() => {
+    const supplierRows = filteredSuppliers.map((s) => ({
+      _key: `sup-${s._id || s.supplierId}`,
+      bookingId: s.bookingId || '—',
+      paymentId: s.paymentId || '—',
+      category: s.category || 'OTHERS',
+      date: s.date,
+      amount: s.amount || 0,
+      account: resolveAccount(s.paymentMode),
+      attachment: s.attachment || '',
+      entryType: 'COMPANY_TO_SUPPLIER'
+    }));
+
+    const manualOutRows = filteredManual
+      .filter((t) => t.type === 'OUTFLOW')
+      .map((t) => {
+        return {
+          _key: `man-${t._id}`,
+          bookingId: '—',
+          paymentId: t.referenceNumber || '—',
+          category: t.category || 'OTHERS',
+          date: t.date,
+          amount: t.amount || 0,
+          account: resolveAccount(t.paymentMode),
+          attachment: '',
+          screenshotTransactionId: t.hasScreenshot ? t._id : null,
+          entryType: t.flowDirection || (t.category === 'COMPANY_TO_TRAVELLER'
+            ? 'COMPANY_TO_TRAVELLER'
+            : t.flowDirection === 'COMPANY_TO_SUPPLIER'
+              ? 'COMPANY_TO_SUPPLIER'
+              : 'MANUAL')
+        };
+      });
+
+    const rows = [...supplierRows, ...manualOutRows];
+    rows.sort((a, b) => {
+      if (sortBy === 'date_desc') return new Date(b.date) - new Date(a.date);
+      if (sortBy === 'date_asc') return new Date(a.date) - new Date(b.date);
+      if (sortBy === 'amount_desc') return Number(b.amount || 0) - Number(a.amount || 0);
+      if (sortBy === 'amount_asc') return Number(a.amount || 0) - Number(b.amount || 0);
+      return 0;
+    });
+    return rows;
+  }, [filteredSuppliers, filteredManual, sortBy]);
+
+  const displayedOutflowRows = allOutflowRows;
+
   // Active counts & totals
-  const totalVolume = mergedInflows.reduce((sum, b) => sum + Number(b.amountPaid || 0), 0);
+  const totalVolume = displayedInflowRows.reduce((sum, b) => sum + Number(b.amountPaid || 0), 0);
 
   // Export to CSV helper
   const exportCSV = () => {
@@ -401,6 +634,28 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       link.click();
       document.body.removeChild(link);
       toast.success('Leads ledger exported as CSV');
+    } else {
+      const headers = ['Booking ID', 'Payment ID', 'Flow Type', 'Category', 'Account', 'Date', 'Amount'];
+      const rows = displayedOutflowRows.map((r) => [
+        r.bookingId || '',
+        r.paymentId || '',
+        r.entryType === 'COMPANY_TO_SUPPLIER' ? 'Company to Supplier'
+          : r.entryType === 'COMPANY_TO_TRAVELLER' ? 'Company to Traveller'
+            : 'Manual',
+        r.category || '',
+        `"${r.account || ''}"`,
+        r.date ? new Date(r.date).toISOString().split('T')[0] : '',
+        r.amount || 0
+      ]);
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `cash_outflows_${timeScope.toLowerCase()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Cash outflows ledger exported as CSV');
     }
   };
 
@@ -434,28 +689,71 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
           {/* Right: Quick Ledger Metrics & Time Scope Switch */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 lg:self-center">
-            {/* KPI pill stats */}
-            <div className="grid grid-cols-2 gap-3 bg-muted/30 p-2.5 rounded-xl border border-border/60">
+            {/* KPI stats: Total Inflow, Total Outflow, and Net Volume (Inflow - Outflow) */}
+            <div className="flex items-center gap-2 sm:gap-3 bg-muted/30 p-2.5 rounded-xl border border-border/60 flex-wrap">
+              {/* Account Context badge if filtered */}
+              {selectedChannel !== 'All Channels' && (
+                <div className="px-3 py-1 border-r border-border/60">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
+                    Account
+                  </span>
+                  <span className="text-sm font-extrabold text-foreground block max-w-[130px] truncate" title={selectedChannel}>
+                    {selectedChannel}
+                  </span>
+                </div>
+              )}
+
+              {/* Total Inflow */}
               <div className="px-3 py-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 block">
-                  Total Volume
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 block">
+                  Total Inflow
                 </span>
-                <span className="text-lg font-bold text-emerald-400 tabular-nums">
-                  ₹{totalVolume.toLocaleString('en-IN')}
+                <span className="text-base sm:text-lg font-bold text-emerald-400 tabular-nums block">
+                  ₹{activeAccountMetrics.inflowAmount.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] text-muted-foreground/80 block">
+                  {activeAccountMetrics.inflowCount} {activeAccountMetrics.inflowCount === 1 ? 'txn' : 'txns'}
                 </span>
               </div>
+
+              {/* Total Outflow */}
               <div className="px-3 py-1 border-l border-border/60">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 block">
-                  Filtered Leads
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 block">
+                  Total Outflow
                 </span>
-                <span className="text-lg font-bold text-foreground tabular-nums">
-                  {mergedInflows.length}
+                <span className="text-base sm:text-lg font-bold text-rose-400 tabular-nums block">
+                  ₹{activeAccountMetrics.outflowAmount.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] text-muted-foreground/80 block">
+                  {activeAccountMetrics.outflowCount} {activeAccountMetrics.outflowCount === 1 ? 'txn' : 'txns'}
+                </span>
+              </div>
+
+              {/* Net Volume = Inflow - Outflow */}
+              <div className={`px-3 py-1 border-l border-border/60 rounded-lg ${
+                activeAccountMetrics.netVolume >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10'
+              }`}>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-foreground block">
+                    Net Volume
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/80 hidden md:inline">
+                    (Inflow - Outflow)
+                  </span>
+                </div>
+                <span className={`text-base sm:text-lg font-black tabular-nums block ${
+                  activeAccountMetrics.netVolume >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {formatNetINR(activeAccountMetrics.netVolume)}
+                </span>
+                <span className="text-[10px] text-muted-foreground block">
+                  {selectedChannel === 'All Channels' ? 'Total Transactions' : `${selectedChannel} Net`}
                 </span>
               </div>
             </div>
 
             {/* Time Scope Toggle */}
-            <div className="inline-flex p-1 bg-muted/60 border border-border/70 rounded-xl">
+            <div className="inline-flex p-1 bg-muted/60 border border-border/70 rounded-xl shrink-0">
               <button
                 type="button"
                 onClick={() => setTimeScope('MONTH')}
@@ -486,7 +784,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
         <div className="inline-flex p-1 bg-muted/50 border border-border/60 rounded-xl gap-1">
           <button
             type="button"
-            onClick={() => { setActiveTab('INFLOW'); setSelectedChannel('All Channels'); }}
+            onClick={() => { setActiveTab('INFLOW'); setSelectedChannel('All Channels'); setInflowFlowFilter('ALL'); }}
             className={`flex items-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${activeTab === 'INFLOW'
               ? 'bg-card text-foreground shadow-sm border border-border/80 text-emerald-400'
               : 'text-muted-foreground hover:text-foreground'
@@ -501,7 +799,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
           <button
             type="button"
-            onClick={() => { setActiveTab('OUTFLOW'); setSelectedChannel('All Channels'); }}
+            onClick={() => { setActiveTab('OUTFLOW'); setSelectedChannel('All Channels'); setOutflowFlowFilter('ALL'); }}
             className={`flex items-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${activeTab === 'OUTFLOW'
               ? 'bg-card text-foreground shadow-sm border border-border/80 text-rose-400'
               : 'text-muted-foreground hover:text-foreground'
@@ -515,32 +813,30 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
           </button>
         </div>
 
-        {activeTab === 'INFLOW' && (
-          <button
-            type="button"
-            onClick={exportCSV}
-            className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium border border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer shrink-0"
-          >
-            <Download className="w-3.5 h-3.5 text-primary" />
-            <span>Export CSV</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={exportCSV}
+          className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium border border-border/70 hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-all cursor-pointer shrink-0"
+        >
+          <Download className="w-3.5 h-3.5 text-primary" />
+          <span>Export CSV</span>
+        </button>
       </div>
 
-      {/* ── FEATURE 3: SLEEK HORIZONTAL PAYMENT MODE FILTER STRIP WITH LEAD COUNTS ── */}
-      {activeTab === 'INFLOW' && (
+      {/* ── FEATURE 3: SLEEK HORIZONTAL ACCOUNT FILTER STRIP (INFLOW & OUTFLOW) ── */}
+      {activeTab === 'INFLOW' ? (
         <div className="rounded-xl border border-border/70 bg-card/75 p-3.5 space-y-2.5">
           <div className="flex items-center justify-between flex-wrap gap-2 px-1">
             <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <CreditCard className="w-4 h-4 text-primary" />
-              <span>Filter by Account</span>
+              <span>Filter by Account (Inflow)</span>
             </div>
 
             {selectedChannel !== 'All Channels' && (
               <button
                 type="button"
                 onClick={() => setSelectedChannel('All Channels')}
-                className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+                className="text-xs text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Show All Channels</span>
@@ -551,7 +847,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
           {/* Clean Modern Pill Rails */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-wrap">
             {SETTLEMENT_CHANNELS.map((ch) => {
-              const stats = channelStats[ch] || { count: 0, totalAmount: 0 };
+              const stats = accountMetrics[ch] || { inflowCount: 0, inflowAmount: 0, outflowCount: 0, outflowAmount: 0, netVolume: 0 };
               const isSelected = selectedChannel === ch;
 
               return (
@@ -572,27 +868,127 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                       : 'bg-muted-foreground/15 text-muted-foreground'
                       }`}
                   >
-                    {stats.count}
+                    {stats.inflowCount}
                   </span>
-                  {/* Total collected in mode */}
-                  {stats.totalAmount > 0 && ch !== 'All Channels' && (
-                    <span className="text-xs text-emerald-400 opacity-90 hidden md:inline tabular-nums">
-                      ₹{Math.round(stats.totalAmount / 1000)}k
-                    </span>
-                  )}
                 </button>
               );
             })}
           </div>
 
           {/* Active summary sub-strip */}
-          {selectedChannel !== 'All Channels' && (
-            <div className="flex items-center justify-between text-xs px-2 pt-1 border-t border-border/40 text-muted-foreground">
+          {selectedChannel !== 'All Channels' ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs px-3 py-2 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CreditCard className="w-3.5 h-3.5 text-primary" />
+                <span>
+                  Account: <strong className="text-foreground font-bold">{selectedChannel}</strong>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-medium">
+                  {activeAccountMetrics.inflowCount} Inflow{activeAccountMetrics.inflowCount === 1 ? '' : 's'} · {activeAccountMetrics.outflowCount} Outflow{activeAccountMetrics.outflowCount === 1 ? '' : 's'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 sm:gap-5 flex-wrap font-medium">
+                <span>
+                  Inflow: <strong className="text-emerald-400 tabular-nums">₹{activeAccountMetrics.inflowAmount.toLocaleString('en-IN')}</strong>
+                </span>
+                <span>
+                  Outflow: <strong className="text-rose-400 tabular-nums">₹{activeAccountMetrics.outflowAmount.toLocaleString('en-IN')}</strong>
+                </span>
+                <span className="px-2 py-0.5 rounded-md border border-border/60 bg-background/80">
+                  Net Volume (Inflow - Outflow):{' '}
+                  <strong className={`font-bold tabular-nums ${activeAccountMetrics.netVolume >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {formatNetINR(activeAccountMetrics.netVolume)}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30 text-muted-foreground">
               <span>
-                Filtered by <strong className="text-foreground">{selectedChannel}</strong>: {channelStats[selectedChannel]?.count || 0} leads paid
+                Total across all treasury accounts: <strong className="text-foreground">{accountMetrics['All Channels'].inflowCount} Inflows</strong> · <strong className="text-foreground">{accountMetrics['All Channels'].outflowCount} Outflows</strong>
               </span>
-              <span className="text-emerald-400 font-bold tabular-nums">
-                Total Collected: ₹{(channelStats[selectedChannel]?.totalAmount || 0).toLocaleString('en-IN')}
+              <div className="flex items-center gap-3 sm:gap-4 flex-wrap font-medium text-[11px]">
+                <span>Inflow: <strong className="text-emerald-400 tabular-nums">₹{accountMetrics['All Channels'].inflowAmount.toLocaleString('en-IN')}</strong></span>
+                <span>Outflow: <strong className="text-rose-400 tabular-nums">₹{accountMetrics['All Channels'].outflowAmount.toLocaleString('en-IN')}</strong></span>
+                <span>
+                  Total Net Volume (Inflow - Outflow):{' '}
+                  <strong className={`font-bold tabular-nums ${accountMetrics['All Channels'].netVolume >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {formatNetINR(accountMetrics['All Channels'].netVolume)}
+                  </strong>
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Outflow Account Showcase & Filter Strip */
+        <div className="rounded-xl border border-border/70 bg-card/75 p-3.5 space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <CreditCard className="w-4 h-4 text-rose-400" />
+              <span>Showcase & Filter by Account (Outflow)</span>
+            </div>
+
+            {selectedChannel !== 'All Channels' && (
+              <button
+                type="button"
+                onClick={() => setSelectedChannel('All Channels')}
+                className="text-xs text-rose-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Show All Channels</span>
+              </button>
+            )}
+          </div>
+
+          {/* Clean Modern Pill Rails for Outflow Accounts */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-wrap">
+            {OUTFLOW_CHANNELS.map((ch) => {
+              const stats = accountMetrics[ch] || { inflowCount: 0, inflowAmount: 0, outflowCount: 0, outflowAmount: 0, netVolume: 0 };
+              const isSelected = selectedChannel === ch;
+
+              return (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setSelectedChannel(ch)}
+                  className={`inline-flex items-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap border ${isSelected
+                    ? 'bg-rose-500/15 text-rose-400 border-rose-500 shadow-sm shadow-rose-500/20 ring-1 ring-rose-500/40 font-bold'
+                    : 'bg-muted/30 hover:bg-muted/70 text-muted-foreground hover:text-foreground border-border/60'
+                    }`}
+                >
+                  <span>{ch}</span>
+                  {/* Count badge */}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-bold tabular-nums ${isSelected
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-muted-foreground/15 text-muted-foreground'
+                      }`}
+                  >
+                    {stats.outflowCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Active summary sub-strip */}
+          {selectedChannel !== 'All Channels' ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs px-3 py-2 rounded-lg bg-muted/40 border border-border/40 text-muted-foreground">
+              <div className="flex items-center gap-2 flex-wrap">
+                <CreditCard className="w-3.5 h-3.5 text-rose-400" />
+                <span>
+                  Account: <strong className="text-foreground font-bold">{selectedChannel}</strong>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted font-medium">
+                  {activeAccountMetrics.inflowCount} Inflow{activeAccountMetrics.inflowCount === 1 ? '' : 's'} · {activeAccountMetrics.outflowCount} Outflow{activeAccountMetrics.outflowCount === 1 ? '' : 's'}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs px-3 py-1.5 rounded-lg bg-muted/20 border border-border/30 text-muted-foreground">
+              <span>
+                Total across all treasury accounts: <strong className="text-foreground">{accountMetrics['All Channels'].inflowCount} Inflows</strong> · <strong className="text-foreground">{accountMetrics['All Channels'].outflowCount} Outflows</strong>
               </span>
             </div>
           )}
@@ -647,7 +1043,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
           <span className="text-xs font-medium text-muted-foreground tabular-nums">
             {activeTab === 'INFLOW'
-              ? `${mergedInflows.length} entries`
+              ? `${displayedInflowRows.length} entries`
               : `${filteredSuppliers.length + filteredManual.filter(t => t.type === 'OUTFLOW').length} entries`}
           </span>
         </div>
@@ -663,21 +1059,87 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
         </div>
       ) : activeTab === 'INFLOW' ? (
         /* ═══════════════════════════════════════════════════════
-           CASH INFLOW TABLE — Booking ID | Payment ID | Date | Amount | Account | SS
+           CASH INFLOW TABLE — Booking ID | Flow Type | Payment ID | Account | Date | SS | Amount
            ═══════════════════════════════════════════════════════ */
         <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
-          {/* Table sub-header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+          {/* Table sub-header with flow filter buttons */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-5 py-4 border-b border-border/50">
             <div className="flex items-center gap-2.5">
               <ArrowDownLeft className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm font-bold text-foreground">Customer Inflows</span>
+              <span className="text-sm font-bold text-foreground">Cash Inflows</span>
               <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 tabular-nums">
-                {mergedInflows.length} records
+                {displayedInflowRows.length} records
               </span>
+            </div>
+
+            {/* Inflow Flow Classification Filter */}
+            <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/60 rounded-xl overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setInflowFlowFilter('ALL')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  inflowFlowFilter === 'ALL'
+                    ? 'bg-card text-foreground shadow-sm border border-border/80 font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <span>All Inflows</span>
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground font-mono">
+                  {inflowMetrics.totalCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInflowFlowFilter('TRAVELLER_TO_COMPANY')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  inflowFlowFilter === 'TRAVELLER_TO_COMPANY'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-sm font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Traveller to Company</span>
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-400 font-mono">
+                  {inflowMetrics.travellerToCompanyCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInflowFlowFilter('SUPPLIER_TO_COMPANY')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  inflowFlowFilter === 'SUPPLIER_TO_COMPANY'
+                    ? 'bg-blue-500/15 text-blue-400 border border-blue-500/40 shadow-sm font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Supplier to Company</span>
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-blue-500/20 text-blue-400 font-mono">
+                  {inflowMetrics.supplierToCompanyCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInflowFlowFilter('MANUAL')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  inflowFlowFilter === 'MANUAL'
+                    ? 'bg-violet-500/15 text-violet-400 border border-violet-500/40 shadow-sm font-bold'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-violet-400" />
+                <span>Manual Inflow</span>
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-violet-500/20 text-violet-400 font-mono">
+                  {inflowMetrics.manualCount}
+                </span>
+              </button>
             </div>
           </div>
 
-          {mergedInflows.length === 0 ? (
+          {displayedInflowRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
               <div className="w-14 h-14 rounded-full bg-muted/50 flex items-center justify-center">
                 <ArrowDownLeft className="w-7 h-7 text-muted-foreground/40" />
@@ -685,17 +1147,18 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-foreground">No inflows found</p>
                 <p className="text-xs text-muted-foreground">
-                  {searchQuery ? `No results for "${searchQuery}"` : 'No customer inflows recorded for this selection'}
+                  {searchQuery ? `No results for "${searchQuery}"` : 'No inflows recorded for this selection'}
                 </p>
               </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left min-w-[700px]">
+              <table className="w-full text-left min-w-[780px]">
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/20">
                     {[
                       { label: 'Booking ID' },
+                      { label: 'Flow Type' },
                       { label: 'Payment ID' },
                       { label: 'Account' },
                       { label: 'Date' },
@@ -712,11 +1175,17 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                   </tr>
                 </thead>
                 <tbody>
-                  {mergedInflows.map((b) => {
-                    const id = b._id || b.paymentId;
+                  {displayedInflowRows.map((b) => {
+                    const id = b._rowKey || b._id || b.paymentId;
                     const isExpanded = expandedIds.has(id);
                     const channel = normalizeMode(b.paymentMode);
-                    const bmsUrl = b.bookingId ? `https://friskytrails-bms.vercel.app/booking/${b.bookingId}` : null;
+                    const bmsUrl = b.bookingId && !String(b.bookingId).startsWith('manual-') ? `https://friskytrails-bms.vercel.app/booking/${b.bookingId}` : null;
+
+                    const flowLabel = b.flowDirection === 'TRAVELLER_TO_COMPANY'
+                      ? { text: 'Traveller → Company', color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' }
+                      : b.flowDirection === 'SUPPLIER_TO_COMPANY'
+                        ? { text: 'Supplier → Company', color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' }
+                        : { text: 'Manual Inflow', color: 'bg-violet-500/15 text-violet-400 border-violet-500/30' };
 
                     return (
                       <tr
@@ -741,7 +1210,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                             ) : (
                               <span className="text-xs font-semibold text-muted-foreground/50">—</span>
                             )}
-                            {b.bookingId && (
+                            {b.bookingId && bmsUrl && (
                               <button
                                 type="button"
                                 onClick={() => copyText(b.bookingId, `bk-${id}`)}
@@ -754,7 +1223,14 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                           </div>
                         </td>
 
-                        {/* 2. Payment ID */}
+                        {/* 2. Flow Type */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${flowLabel.color}`}>
+                            {flowLabel.text}
+                          </span>
+                        </td>
+
+                        {/* 3. Payment ID */}
                         <td className="px-4 py-3.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1.5">
                             <span className="text-xs text-foreground font-medium tabular-nums">
@@ -773,25 +1249,25 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                           </div>
                         </td>
 
-                        {/* 3. Account (Settlement Channel) */}
+                        {/* 4. Account (Settlement Channel) */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-muted/80 border border-border/80 text-foreground">
                             {channel}
                           </span>
                         </td>
 
-                        {/* 4. Date */}
+                        {/* 5. Date */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
                           {formatDate(b.paymentDate)}
                         </td>
 
-                        {/* 5. SS */}
+                        {/* 6. Screenshot */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-center" onClick={e => e.stopPropagation()}>
                           {b.attachment || b.screenshotTransactionId ? (
                             <button
                               type="button"
                               onClick={() => b.screenshotTransactionId
-                                ? openManualScreenshot(b.screenshotTransactionId, 'Manual Inflow — Payment Proof')
+                                ? openManualScreenshot(b.screenshotTransactionId, 'Inflow — Payment Proof')
                                 : setActiveScreenshot({ url: b.attachment, title: `Booking ${b.bookingId || '—'} — Payment Proof` })}
                               className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
                               title="Click to preview screenshot"
@@ -803,7 +1279,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
                           )}
                         </td>
 
-                        {/* 6. Amount */}
+                        {/* 7. Amount */}
                         <td className="px-4 py-3.5 whitespace-nowrap text-right">
                           <span className="text-sm font-bold text-emerald-400 tabular-nums">
                             +₹{Number(b.amountPaid || 0).toLocaleString('en-IN')}
@@ -820,162 +1296,152 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       ) : (
         /* ═══════════════════════════════════════════════════════
            TAB 2: CASH OUTFLOW — SUPPLIER + MANUAL EXPENSES
-           Columns: Booking ID | Payment ID | Category | Date | Amount | Account | SS
+           Columns: Booking ID | Payment ID | Flow Type | Category | Account | Date | SS | Amount
            ═══════════════════════════════════════════════════════ */
-        (() => {
-          // Merge supplier outflows + manual outflows into one list
-          const supplierRows = filteredSuppliers.map(s => ({
-            _key: `sup-${s._id || s.supplierId}`,
-            bookingId: s.bookingId || '—',
-            paymentId: s.paymentId || '—',
-            category: s.category || 'OTHERS',
-            date: s.date,
-            amount: s.amount || 0,
-            account: normalizeMode(s.paymentMode),
-            attachment: s.attachment || ''
-          }));
-          const manualOutRows = filteredManual
-            .filter(t => t.type === 'OUTFLOW')
-            .map(t => ({
-              _key: `man-${t._id}`,
-              bookingId: '—',
-              paymentId: t.referenceNumber || '—',
-              category: t.category || 'OTHERS',
-              date: t.date,
-              amount: t.amount || 0,
-              account: normalizeMode(t.paymentMode),
-              attachment: '',
-              screenshotTransactionId: t.hasScreenshot ? t._id : null
-            }));
-          const allOutflows = [...supplierRows, ...manualOutRows].sort(
-            (a, b) => new Date(b.date) - new Date(a.date)
-          );
-
-          return allOutflows.length === 0 ? (
-            <div className="p-16 rounded-2xl border border-border/60 bg-muted/20 text-center space-y-2">
-              <ArrowUpRight className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
-              <h3 className="text-sm font-semibold text-foreground">No Cash Outflows</h3>
-              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                No outflows recorded for this period or filter.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
-              {/* Table sub-header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
-                <div className="flex items-center gap-2.5">
-                  <ArrowUpRight className="w-4 h-4 text-rose-400" />
-                  <span className="text-sm font-bold text-foreground">Cash Outflows</span>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 tabular-nums">
-                    {allOutflows.length} records
-                  </span>
-                </div>
+        displayedOutflowRows.length === 0 ? (
+          <div className="p-16 rounded-2xl border border-border/60 bg-muted/20 text-center space-y-2">
+            <ArrowUpRight className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+            <h3 className="text-sm font-semibold text-foreground">No Cash Outflows Found</h3>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+              No cash outflows recorded for the selected account and period.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-xl overflow-hidden">
+            {/* Table sub-header with Flow Filter Segmented Control */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 py-4 border-b border-border/50 gap-3">
+              <div className="flex items-center gap-2.5">
+                <ArrowUpRight className="w-4 h-4 text-rose-400" />
+                <span className="text-sm font-bold text-foreground">Cash Outflow Ledger</span>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 tabular-nums">
+                  {displayedOutflowRows.length} records
+                </span>
+                <span className="text-xs font-bold text-rose-400 tabular-nums">
+                  (-₹{displayedOutflowRows.reduce((s, r) => s + Number(r.amount || 0), 0).toLocaleString('en-IN')})
+                </span>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left min-w-[700px]">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-muted/20">
-                      {[
-                        { label: 'Booking ID' },
-                        { label: 'Payment ID' },
-                        { label: 'Category' },
-                        { label: 'Account' },
-                        { label: 'Date' },
-                        { label: 'SS', align: 'center' },
-                        { label: 'Amount', align: 'right' },
-                      ].map(col => (
-                        <th
-                          key={col.label}
-                          className={`px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
-                        >
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allOutflows.map((row) => (
-                      <tr
-                        key={row._key}
-                        className="group border-b border-border/40 hover:bg-muted/30 transition-colors duration-150 text-xs"
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left min-w-[780px]">
+                <thead>
+                  <tr className="border-b border-border/50 bg-muted/20">
+                    {[
+                      { label: 'Booking ID' },
+                      { label: 'Payment ID' },
+                      { label: 'Flow Type' },
+                      { label: 'Category' },
+                      { label: 'Account' },
+                      { label: 'Date' },
+                      { label: 'SS', align: 'center' },
+                      { label: 'Amount', align: 'right' },
+                    ].map(col => (
+                      <th
+                        key={col.label}
+                        className={`px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
                       >
-                        {/* 1. Booking ID */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          {row.bookingId !== '—' ? (
-                            <a
-                              href={`https://friskytrails-bms.vercel.app/booking/${row.bookingId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all"
-                              title={`Open ${row.bookingId} in BMS`}
-                            >
-                              <span>{row.bookingId}</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ) : (
-                            <span className="text-xs font-semibold text-muted-foreground/50">—</span>
-                          )}
-                        </td>
-
-                        {/* 2. Payment ID */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className="text-xs text-foreground font-medium tabular-nums">
-                            {row.paymentId}
-                          </span>
-                        </td>
-
-                        {/* 3. Category */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            {row.category}
-                          </span>
-                        </td>
-
-                        {/* 4. Account */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-muted/80 border border-border/80 text-foreground">
-                            {row.account}
-                          </span>
-                        </td>
-
-                        {/* 5. Date */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDate(row.date)}
-                        </td>
-
-                        {/* 6. SS */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-center">
-                          {row.attachment || row.screenshotTransactionId ? (
-                            <button
-                              type="button"
-                              onClick={() => row.screenshotTransactionId
-                                ? openManualScreenshot(row.screenshotTransactionId, `${row.category || 'Outflow'} — Payment Proof`)
-                                : setActiveScreenshot({ url: row.attachment, title: `${row.category || 'Outflow'} — Payment Proof` })}
-                              className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
-                              title="Click to preview screenshot"
-                            >
-                              <ImageIcon className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground/40">—</span>
-                          )}
-                        </td>
-
-                        {/* 7. Amount */}
-                        <td className="px-4 py-3.5 whitespace-nowrap text-right">
-                          <span className="text-sm font-bold text-rose-400 tabular-nums">
-                            -₹{Number(row.amount).toLocaleString('en-IN')}
-                          </span>
-                        </td>
-                      </tr>
+                        {col.label}
+                      </th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedOutflowRows.map((row) => (
+                    <tr
+                      key={row._key}
+                      className="group border-b border-border/40 hover:bg-muted/30 transition-colors duration-150 text-xs"
+                    >
+                      {/* 1. Booking ID */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        {row.bookingId !== '—' ? (
+                          <a
+                            href={`https://friskytrails-bms.vercel.app/booking/${row.bookingId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/15 text-primary hover:bg-primary/25 border border-primary/30 text-xs font-semibold transition-all"
+                            title={`Open ${row.bookingId} in BMS`}
+                          >
+                            <span>{row.bookingId}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-xs font-semibold text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+
+                      {/* 2. Payment ID */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="text-xs text-foreground font-medium tabular-nums">
+                          {row.paymentId}
+                        </span>
+                      </td>
+
+                      {/* 3. Flow Type */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${
+                          row.entryType === 'COMPANY_TO_TRAVELLER'
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
+                            : row.entryType === 'COMPANY_TO_SUPPLIER'
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/25'
+                              : 'bg-muted/60 text-muted-foreground border-border/70'
+                        }`}>
+                          {row.entryType === 'COMPANY_TO_TRAVELLER' ? 'Company to Traveller'
+                            : row.entryType === 'COMPANY_TO_SUPPLIER' ? 'Company to Supplier'
+                              : 'Manual'}
+                        </span>
+                      </td>
+
+                      {/* 4. Category */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          {row.category}
+                        </span>
+                      </td>
+
+                      {/* 5. Account */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-muted/80 border border-border/80 text-foreground">
+                          {row.account}
+                        </span>
+                      </td>
+
+                      {/* 6. Date */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-xs text-muted-foreground">
+                        {formatDate(row.date)}
+                      </td>
+
+                      {/* 7. SS */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-center">
+                        {row.attachment || row.screenshotTransactionId ? (
+                          <button
+                            type="button"
+                            onClick={() => row.screenshotTransactionId
+                              ? openManualScreenshot(row.screenshotTransactionId, `${row.category || 'Outflow'} — Payment Proof`)
+                              : setActiveScreenshot({ url: row.attachment, title: `${row.category || 'Outflow'} — Payment Proof` })}
+                            className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-semibold transition-all shadow-sm cursor-pointer"
+                            title="Click to preview screenshot"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">—</span>
+                        )}
+                      </td>
+
+                      {/* 8. Amount */}
+                      <td className="px-4 py-3.5 whitespace-nowrap text-right">
+                        <span className="text-sm font-bold text-rose-400 tabular-nums">
+                          -₹{Number(row.amount).toLocaleString('en-IN')}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          );
-        })()
+          </div>
+        )
       )}
 
       {/* ── Screenshot Preview Modal (shared between inflow & outflow) ── */}
