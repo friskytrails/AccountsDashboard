@@ -31,6 +31,7 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setSummary(null);
     try {
       const accountParam =
         selectedAccount !== 'ALL' && selectedAccount !== 'ACCOUNT_WISE'
@@ -76,6 +77,12 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
     setSelectedAccount(acc);
   };
 
+  const formatBalance = (value) => {
+    if (loading) return 'Loading…';
+    if (summary == null || value == null || !Number.isFinite(Number(value))) return 'Unavailable';
+    return `₹${Number(value).toLocaleString('en-IN')}`;
+  };
+
   async function handleDeleteTransaction(id) {
     if (!window.confirm('Are you sure you want to delete this transaction record?')) return;
     try {
@@ -112,10 +119,10 @@ export default function CashFlowPage({ selectedMonth, selectedYear }) {
                 Filtering by: <strong className="text-primary">{selectedAccount}</strong>
               </span>
               <span className="text-xs text-amber-400 font-medium tabular-nums">
-                Carryforward: <strong>₹{Number(summary?.openingBalance || 0).toLocaleString('en-IN')}</strong>
+                Carryforward: <strong>{formatBalance(summary?.openingBalance)}</strong>
               </span>
               <span className="text-xs text-indigo-400 font-medium tabular-nums">
-                Closing: <strong>₹{Number(summary?.closingBalance || 0).toLocaleString('en-IN')}</strong>
+                Closing: <strong>{formatBalance(summary?.closingBalance)}</strong>
               </span>
               <button
                 type="button"

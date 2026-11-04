@@ -257,6 +257,7 @@ async function getLiveOutflows(req, res) {
             }
           },
           paymentId: '$services.payments.paymentId',
+          paymentTo: '$services.payments.paymentTo',
           attachment: '$services.payments.attachment',
           attachmentName: '$services.payments.attachmentName',
           status: '$services.payments.status',
@@ -300,6 +301,7 @@ async function getLiveOutflows(req, res) {
         amount,
         paymentMode: s.paymentMode,
         paymentId: s.paymentId || (s._id ? String(s._id).slice(-8) : '—'),
+        paymentTo: s.paymentTo,
         attachment: s.attachment || '',
         details: s.details,
         addedByName: s.addedByName
@@ -395,7 +397,15 @@ async function editTransaction(req, res) {
 
     const update = {};
     if (type) update.type = type;
-    if (category) update.category = category;
+    if (category) {
+      const validCategoriesForType = effectiveType === 'OUTFLOW'
+        ? ['STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST']
+        : VALID_CATEGORIES;
+      if (!validCategoriesForType.includes(category)) {
+        return res.status(400).json({ error: `category must be one of: ${validCategoriesForType.join(', ')}` });
+      }
+      update.category = category;
+    }
     if (flowDirection) update.flowDirection = flowDirection;
     if (amount !== undefined) update.amount = parseFloat(amount);
     if (description !== undefined) update.description = description;
@@ -516,14 +526,15 @@ async function getBookingMargins(req, res) {
           to.setHours(23, 59, 59, 999);
           match.createdAt.$lte = to;
         }
-      } else if (month && year) {
-        const m = parseInt(month, 10);
-        const y = parseInt(year, 10);
-        if (!isNaN(m) && !isNaN(y)) {
-          const startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
-          const endDate = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
-          match.createdAt = { $gte: startDate, $lte: endDate };
+      } else if (month || year) {
+        const m = Number(month);
+        const y = Number(year);
+        if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(y) || y < 2000 || y > 9999) {
+          return res.status(400).json({ error: 'Invalid month or year' });
         }
+        const startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+        const endDate = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+        match.createdAt = { $gte: startDate, $lte: endDate };
       }
     }
 

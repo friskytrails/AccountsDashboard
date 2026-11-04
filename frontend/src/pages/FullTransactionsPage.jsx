@@ -98,6 +98,18 @@ function formatKiloINR(amount) {
   return `${sign}₹${k}k`;
 }
 
+function getLiveOutflowDirection(paymentTo) {
+  return ['Traveller', 'Traveler'].includes(paymentTo)
+    ? 'COMPANY_TO_TRAVELLER'
+    : 'COMPANY_TO_SUPPLIER';
+}
+
+function escapeCsvCell(value, formulaSafe = false) {
+  let text = value == null ? '' : String(value);
+  if (formulaSafe && /^[\s]*[=+@-]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -166,18 +178,38 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     try {
       const isMonth = timeScope === 'MONTH';
       const monthQuery = isMonth ? `?month=${selectedMonth}&year=${selectedYear}` : '';
-      const manualMonthQuery = isMonth ? `?month=${selectedMonth}&year=${selectedYear}&limit=500` : '?limit=1000';
+      const manualLimit = isMonth ? 500 : 1000;
+      const manualParams = new URLSearchParams({ limit: String(manualLimit) });
+      if (isMonth) {
+        manualParams.set('month', String(selectedMonth));
+        manualParams.set('year', String(selectedYear));
+      }
 
-      const [inflowsRes, manualRes, outflowsRes] = await Promise.all([
+      const [inflowsRes, firstManualRes, outflowsRes] = await Promise.all([
         apiFetch(`/transactions/live-inflows${monthQuery}`, { signal: controller.signal }),
-        apiFetch(`/transactions${manualMonthQuery}`, { signal: controller.signal }),
+        apiFetch(`/transactions?${manualParams.toString()}`, { signal: controller.signal }),
         apiFetch(`/transactions/live-outflows${monthQuery}`, { signal: controller.signal })
       ]);
+
+      const manualTransactions = [...(firstManualRes.transactions || [])];
+      const totalPages = Number(firstManualRes.totalPages) || 1;
+      for (let startPage = 2; startPage <= totalPages; startPage += 10) {
+        const pageNumbers = Array.from(
+          { length: Math.min(10, totalPages - startPage + 1) },
+          (_, index) => startPage + index
+        );
+        const pageResponses = await Promise.all(pageNumbers.map((page) => {
+          const params = new URLSearchParams(manualParams);
+          params.set('page', String(page));
+          return apiFetch(`/transactions?${params.toString()}`, { signal: controller.signal });
+        }));
+        pageResponses.forEach((response) => manualTransactions.push(...(response.transactions || [])));
+      }
 
       // Commit results only if this request is still the latest one
       if (seq === requestSeqRef.current) {
         setInflows(inflowsRes.inflows || []);
-        setManualTx(manualRes.transactions || []);
+        setManualTx(manualTransactions);
         setOutflows(outflowsRes.outflows || []);
       }
     } catch (err) {
@@ -300,7 +332,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       ...scopedOutflows.map((s) => ({
         paymentMode: s.paymentMode,
         amount: Number(s.amount || 0),
-        flowDirection: 'COMPANY_TO_SUPPLIER'
+        flowDirection: getLiveOutflowDirection(s.paymentTo)
       })),
       ...scopedManualOutflows.map((m) => ({
         paymentMode: m.paymentMode,
@@ -469,7 +501,9 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       .map((t) => {
         const flow = t.flowDirection === 'SUPPLIER_TO_COMPANY' || t.category === 'SUPPLIER_TO_COMPANY'
           ? 'SUPPLIER_TO_COMPANY'
-          : 'MANUAL';
+          : t.flowDirection === 'TRAVELLER_TO_COMPANY' || t.category === 'TRAVELLER_TO_COMPANY'
+            ? 'TRAVELLER_TO_COMPANY'
+            : 'MANUAL';
         return {
           ...t,
           _rowKey: `manual-${t._id}`,
@@ -567,7 +601,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       amount: s.amount || 0,
       account: resolveAccount(s.paymentMode),
       attachment: s.attachment || '',
-      entryType: 'COMPANY_TO_SUPPLIER'
+      entryType: getLiveOutflowDirection(s.paymentTo)
     }));
 
     const manualOutRows = filteredManual
@@ -597,7 +631,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
       if (sortBy === 'date_asc') return new Date(a.date) - new Date(b.date);
       if (sortBy === 'amount_desc') return Number(b.amount || 0) - Number(a.amount || 0);
       if (sortBy === 'amount_asc') return Number(a.amount || 0) - Number(b.amount || 0);
-      return 0;
+      return new Date(b.date) - new Date(a.date);
     });
     return rows;
   }, [filteredSuppliers, filteredManual, sortBy]);
@@ -611,22 +645,22 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
   const exportCSV = () => {
     if (activeTab === 'INFLOW') {
       const headers = ['Booking ID', 'Traveller Name', 'Phone', 'Email', 'Location', 'Package', 'Payment Mode', 'Payment ID', 'Amount Paid', 'Disbursed Date', 'Status', 'Agent'];
-      const rows = filteredBookings.map((b) => [
-        b.bookingId || '',
-        `"${b.travellerName || ''}"`,
-        b.travellerPhone || '',
-        b.travellerEmail || '',
-        `"${b.location || ''}"`,
-        `"${b.packageName || ''}"`,
-        `"${b.paymentMode || ''}"`,
-        b.paymentId || '',
-        b.amountPaid || 0,
+      const rows = displayedInflowRows.map((b) => [
+        b.bookingId,
+        b.travellerName,
+        b.travellerPhone,
+        b.travellerEmail,
+        b.location,
+        b.packageName,
+        b.paymentMode,
+        b.paymentId,
+        b.amountPaid,
         b.paymentDate ? new Date(b.paymentDate).toISOString().split('T')[0] : '',
-        b.status || '',
-        b.addedBy || ''
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
+        b.status,
+        b.addedBy
+      ].map((value, index) => escapeCsvCell(value, index === 7)));
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent([headers.join(','), ...rows.map(r => r.join(','))].join('\n'));
+      const encodedUri = csvContent;
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
       link.setAttribute('download', `leads_ledger_${timeScope.toLowerCase()}.csv`);
@@ -637,18 +671,18 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
     } else {
       const headers = ['Booking ID', 'Payment ID', 'Flow Type', 'Category', 'Account', 'Date', 'Amount'];
       const rows = displayedOutflowRows.map((r) => [
-        r.bookingId || '',
-        r.paymentId || '',
+        r.bookingId,
+        r.paymentId,
         r.entryType === 'COMPANY_TO_SUPPLIER' ? 'Company to Supplier'
           : r.entryType === 'COMPANY_TO_TRAVELLER' ? 'Company to Traveller'
             : 'Manual',
-        r.category || '',
-        `"${r.account || ''}"`,
+        r.category,
+        r.account,
         r.date ? new Date(r.date).toISOString().split('T')[0] : '',
-        r.amount || 0
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
+        r.amount
+      ].map((value, index) => escapeCsvCell(value, index === 1)));
+      const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent([headers.join(','), ...rows.map(r => r.join(','))].join('\n'));
+      const encodedUri = csvContent;
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
       link.setAttribute('download', `cash_outflows_${timeScope.toLowerCase()}.csv`);
@@ -799,7 +833,7 @@ export default function FullTransactionsPage({ selectedMonth: propMonth, selecte
 
           <button
             type="button"
-            onClick={() => { setActiveTab('OUTFLOW'); setSelectedChannel('All Channels'); setOutflowFlowFilter('ALL'); }}
+            onClick={() => { setActiveTab('OUTFLOW'); setSelectedChannel('All Channels'); }}
             className={`flex items-center gap-2 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${activeTab === 'OUTFLOW'
               ? 'bg-card text-foreground shadow-sm border border-border/80 text-rose-400'
               : 'text-muted-foreground hover:text-foreground'

@@ -419,17 +419,32 @@ async function getMonthlySummary(req, res) {
       openingBalance = await getPriorCumulativeNet(startDate, accountFilter);
     } else {
       const prevBalance = await MonthlyBalance.findOne({ month: prevMonth, year: prevYear });
-      openingBalance = prevBalance?.closingBalance || (await getPriorCumulativeNet(startDate, null));
+      if (prevBalance?.isManuallySet) {
+        openingBalance = prevBalance.closingBalance;
+      } else {
+        // Recompute automatic snapshots so totals saved under older outflow rules
+        // cannot override the current transaction-based carryforward.
+        openingBalance = await getPriorCumulativeNet(startDate, null);
+        if (prevBalance) {
+          await MonthlyBalance.updateOne(
+            { _id: prevBalance._id, isManuallySet: { $ne: true } },
+            { $set: { closingBalance: openingBalance } }
+          );
+        }
+      }
     }
     const closingBalance = openingBalance + netCashFlow;
 
     // Auto-save snapshot for the global month if not single-account filter
     if (!isSingleAccount) {
-      await MonthlyBalance.findOneAndUpdate(
-        { month, year },
-        { closingBalance, totalInflow, totalOutflow },
-        { upsert: true, new: true }
-      );
+      const currentBalance = await MonthlyBalance.findOne({ month, year });
+      if (!currentBalance?.isManuallySet) {
+        await MonthlyBalance.findOneAndUpdate(
+          { month, year },
+          { closingBalance, totalInflow, totalOutflow },
+          { upsert: true, new: true }
+        );
+      }
     }
 
     // 2. Previous month comparison

@@ -133,9 +133,11 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
   const selectedYear = propYear || outletCtx.selectedYear || 2026;
 
   // Status Filter: 'Confirmed' (Default) | 'ALL' | 'Cancelled'
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('Confirmed');
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
+  const latestRequestRef = useRef(0);
   const [bookingFromDate, setBookingFromDate] = useState('');
   const [bookingToDate, setBookingToDate] = useState('');
   const [serviceFromDate, setServiceFromDate] = useState('');
@@ -143,10 +145,15 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
   const [appliedDates, setAppliedDates] = useState({ bookingFromDate: '', bookingToDate: '', serviceFromDate: '', serviceToDate: '' });
 
   const monthName = MONTH_NAMES[Number(selectedMonth) - 1] || `Month ${selectedMonth}`;
+  const hasAppliedBookingRange = Boolean(appliedDates.bookingFromDate || appliedDates.bookingToDate);
+  const periodLabel = hasAppliedBookingRange ? 'the booking date range' : `${monthName} ${selectedYear}`;
 
   // ── Fetch summary according to Booking Date (createdAt) in selected month ──
   const fetchMarginSummary = useCallback(async () => {
+    const requestId = ++latestRequestRef.current;
     setLoading(true);
+    setSummary(null);
+    setSummaryError(false);
     try {
       const params = new URLSearchParams();
       // The explicit booking date range overrides month selection on the server.
@@ -166,12 +173,16 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
       params.set('limit', '1');
 
       const data = await apiFetch(`/transactions/profit-margins?${params.toString()}`);
+      if (requestId !== latestRequestRef.current) return;
       setSummary(data.summary || null);
     } catch (err) {
+      if (requestId !== latestRequestRef.current) return;
+      setSummary(null);
+      setSummaryError(true);
       console.error('Failed to load margin data:', err);
       toast.error('Failed to load profit and loss margins');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequestRef.current) setLoading(false);
     }
   }, [selectedMonth, selectedYear, statusFilter, appliedDates]);
 
@@ -198,6 +209,18 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
   const profitableCount = summary?.profitableCount || 0;
   const lossCount = summary?.lossCount || 0;
   const breakEvenCount = summary?.breakEvenCount || Math.max(0, totalCount - profitableCount - lossCount);
+
+  const applyDateFilters = () => {
+    if (bookingFromDate && bookingToDate && bookingFromDate > bookingToDate) {
+      toast.error('Booking start date must be on or before the end date');
+      return;
+    }
+    if (serviceFromDate && serviceToDate && serviceFromDate > serviceToDate) {
+      toast.error('Service start date must be on or before the end date');
+      return;
+    }
+    setAppliedDates({ bookingFromDate, bookingToDate, serviceFromDate, serviceToDate });
+  };
 
   return (
     <Box className="w-full max-w-[1680px] mx-auto space-y-7 pb-20">
@@ -290,7 +313,7 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setAppliedDates({ bookingFromDate, bookingToDate, serviceFromDate, serviceToDate })} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50">Apply filters</button>
+            <button type="button" onClick={applyDateFilters} disabled={loading} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:opacity-90 disabled:opacity-50">Apply filters</button>
             {(bookingFromDate || bookingToDate || serviceFromDate || serviceToDate || appliedDates.bookingFromDate || appliedDates.bookingToDate || appliedDates.serviceFromDate || appliedDates.serviceToDate) && (
               <button type="button" onClick={() => { setBookingFromDate(''); setBookingToDate(''); setServiceFromDate(''); setServiceToDate(''); setAppliedDates({ bookingFromDate: '', bookingToDate: '', serviceFromDate: '', serviceToDate: '' }); }} className="text-xs font-semibold text-primary hover:underline">Clear date filters</button>
             )}
@@ -304,8 +327,13 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
           <RefreshCw className="w-7 h-7 text-primary animate-spin" />
           <Text className="text-sm font-medium text-muted-foreground">Calculating booking margins for {monthName} {selectedYear}...</Text>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-6">
+      ) : summaryError ? (
+        <div role="alert" className="p-10 rounded-2xl border border-rose-500/30 bg-rose-500/5 text-center">
+          <Text className="text-sm font-semibold text-rose-400">Profit and loss summary is unavailable. Try refreshing or adjusting the filters.</Text>
+        </div>
+      ) : summary ? (
+        <>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
           {/* 1. Total Package Cost */}
           <KpiCard
             label="Total Package Cost"
@@ -318,7 +346,7 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
               icon: Package,
               className: 'bg-orange-500/10 border-orange-500/25 text-orange-400'
             }}
-            subtext={`Gross package value for ${monthName} ${selectedYear}`}
+            subtext={`Gross package value for ${periodLabel}`}
           />
 
           {/* 2. Total Margin */}
@@ -350,10 +378,46 @@ export default function ProfitMarginPage({ selectedMonth: propMonth, selectedYea
               icon: BadgeIndianRupee,
               className: 'bg-sky-500/10 border-sky-500/25 text-sky-400'
             }}
-            subtext={`GST liability for ${monthName} ${selectedYear}`}
+            subtext={`GST liability for ${periodLabel}`}
           />
+
+          <KpiCard
+            label="Supplier Cost"
+            value={totalSupplierCost}
+            icon={Building2}
+            colorClass="text-violet-400"
+            bgGlow="bg-violet-500"
+            badge={{
+              text: `${supplierCostRatio}% of package value`,
+              icon: Building2,
+              className: 'bg-violet-500/10 border-violet-500/25 text-violet-400'
+            }}
+            subtext="Estimated supplier obligations"
+          />
+
+          <Box className="rounded-2xl border border-border/70 bg-card/85 backdrop-blur-xl p-5 md:p-6 shadow-xl">
+            <Text className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground/80">Booking Outcomes</Text>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
+                <CheckCircle2 className="w-4 h-4 mx-auto text-emerald-400" />
+                <div className="mt-2 text-xl font-black tabular-nums text-emerald-400">{profitableCount}</div>
+                <Text className="mt-1 text-[10px] text-muted-foreground">Profitable</Text>
+              </div>
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
+                <XCircle className="w-4 h-4 mx-auto text-rose-400" />
+                <div className="mt-2 text-xl font-black tabular-nums text-rose-400">{lossCount}</div>
+                <Text className="mt-1 text-[10px] text-muted-foreground">Loss</Text>
+              </div>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                <Scale className="w-4 h-4 mx-auto text-amber-400" />
+                <div className="mt-2 text-xl font-black tabular-nums text-amber-400">{breakEvenCount}</div>
+                <Text className="mt-1 text-[10px] text-muted-foreground">Break-even</Text>
+              </div>
+            </div>
+          </Box>
         </div>
-      )}
+        </>
+      ) : null}
     </Box>
   );
 }
