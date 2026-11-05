@@ -9,9 +9,7 @@ import {
   Image as ImageIcon,
   UploadCloud,
   Trash2,
-  FileText,
-  Building2,
-  Users
+  FileText
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../utils/api';
@@ -45,9 +43,7 @@ import {
   SelectItem,
   Box,
   VStack,
-  HStack,
-  Badge,
-  BadgeText
+  HStack
 } from '@/components/ui';
 
 const CATEGORIES = [
@@ -76,7 +72,7 @@ export default function AddTransactionModal({
   initialType = 'OUTFLOW'
 }) {
   const [type, setType] = useState(initialType);
-  const [flowDirection, setFlowDirection] = useState('COMPANY_TO_SUPPLIER');
+  const [flowDirection, setFlowDirection] = useState('TRAVELLER_TO_COMPANY');
   const [category, setCategory] = useState('STAFF_SALARIES');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
@@ -96,7 +92,7 @@ export default function AddTransactionModal({
         setFlowDirection('TRAVELLER_TO_COMPANY');
         setCategory('TRAVELLER_TO_COMPANY');
       } else {
-        setFlowDirection('COMPANY_TO_SUPPLIER');
+        setFlowDirection('');
         setCategory('STAFF_SALARIES');
       }
       setScreenshot('');
@@ -122,9 +118,7 @@ export default function AddTransactionModal({
       }
       setCategory('TRAVELLER_TO_COMPANY');
     } else {
-      if (flowDirection !== 'COMPANY_TO_SUPPLIER' && flowDirection !== 'COMPANY_TO_TRAVELLER') {
-        setFlowDirection('COMPANY_TO_SUPPLIER');
-      }
+      setFlowDirection('');
       setCategory('STAFF_SALARIES');
     }
   }, [type]);
@@ -234,18 +228,13 @@ export default function AddTransactionModal({
 
     setSubmitting(true);
     try {
-      const finalCategory =
-        type === 'INFLOW'
-          ? flowDirection
-          : flowDirection === 'COMPANY_TO_TRAVELLER'
-            ? 'COMPANY_TO_TRAVELLER'
-            : category;
+      const finalCategory = type === 'INFLOW' ? flowDirection : category;
 
       await apiFetch('/transactions', {
         method: 'POST',
         body: JSON.stringify({
           type,
-          flowDirection,
+          ...(type === 'INFLOW' ? { flowDirection } : {}),
           category: finalCategory,
           amount: parsedAmount,
           date,
@@ -257,15 +246,7 @@ export default function AddTransactionModal({
       });
 
       toast.success(
-        `${type === 'INFLOW' ? 'Inflow' : 'Expense'} (${
-          flowDirection === 'TRAVELLER_TO_COMPANY'
-            ? 'Traveller to Company'
-            : flowDirection === 'SUPPLIER_TO_COMPANY'
-              ? 'Supplier to Company'
-              : flowDirection === 'COMPANY_TO_SUPPLIER'
-                ? 'Company to Supplier'
-                : 'Company to Traveller'
-        }) recorded successfully!`
+        `${type === 'INFLOW' ? 'Inflow' : 'Manual outflow'} recorded successfully!`
       );
       setAmount('');
       setDescription('');
@@ -335,54 +316,6 @@ export default function AddTransactionModal({
                 </HStack>
               </Box>
 
-              {/* Outflow Direction Classification */}
-              {type === 'OUTFLOW' && (
-                <Box className="p-3 bg-muted/30 border border-border/60 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono uppercase tracking-wider font-bold text-primary">
-                      Flow Classification
-                    </span>
-                    <Badge variant="error" size="sm">
-                      <BadgeText>Outflow Direction</BadgeText>
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setFlowDirection('COMPANY_TO_SUPPLIER')}
-                      className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                        flowDirection === 'COMPANY_TO_SUPPLIER'
-                          ? 'bg-rose-500/15 border-rose-500/60 ring-1 ring-rose-500/40 text-foreground'
-                          : 'bg-card/60 border-border/60 text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-xs text-rose-400">
-                        <Building2 className="w-3.5 h-3.5" />
-                        <span>Company to Supplier</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Vendor payout, hotel, transport, fleet</p>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setFlowDirection('COMPANY_TO_TRAVELLER')}
-                      className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                        flowDirection === 'COMPANY_TO_TRAVELLER'
-                          ? 'bg-rose-500/15 border-rose-500/60 ring-1 ring-rose-500/40 text-foreground'
-                          : 'bg-card/60 border-border/60 text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 font-bold text-xs text-amber-400">
-                        <Users className="w-3.5 h-3.5" />
-                        <span>Company to Traveller</span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Guest cancellation refund or return</p>
-                    </button>
-                  </div>
-                </Box>
-              )}
-
               {/* Amount and Date Fields */}
               <HStack space="md" className="w-full">
                 <Box className="flex-1">
@@ -426,8 +359,8 @@ export default function AddTransactionModal({
                 </Box>
               </HStack>
 
-              {/* Operating Category for Company to Supplier */}
-              {type === 'OUTFLOW' && flowDirection === 'COMPANY_TO_SUPPLIER' && (
+              {/* Operating Category for manual outflows */}
+              {type === 'OUTFLOW' && (
                 <FormControl>
                   <FormControlLabel>
                     <FormControlLabelText>Operating Category</FormControlLabelText>

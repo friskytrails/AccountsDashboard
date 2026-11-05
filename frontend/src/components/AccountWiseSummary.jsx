@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Filter,
-  Check
+  Check,
+  History
 } from 'lucide-react';
 import { Card, Box, Heading, Text, Badge, BadgeText, VStack, HStack, Button, ButtonText } from '@/components/ui';
 
@@ -112,6 +113,17 @@ export default function AccountWiseSummary({
                 )}
               </div>
 
+              {/* Carryforward / Previous Month Bank Balance */}
+              <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 mt-2.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400/90 flex items-center gap-1">
+                  <History className="w-3 h-3 text-amber-400" />
+                  Prev Month Balance (Carryforward)
+                </span>
+                <span className="font-extrabold tabular-nums text-amber-400">
+                  {formatRupee(item.opening)}
+                </span>
+              </div>
+
               {/* Metrics Grid */}
               <div className="grid grid-cols-2 gap-3 py-3 text-xs">
                 {/* Inflow */}
@@ -163,9 +175,11 @@ export default function AccountWiseSummary({
                 </div>
               </div>
 
-              {/* Footer hint */}
+              {/* Footer hint & equation */}
               <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>Opening: {formatRupee(item.opening)}</span>
+                <span>
+                  Prev {formatRupee(item.opening)} {item.net >= 0 ? '+' : '−'} {formatRupee(Math.abs(item.net))} = <strong className="text-foreground">{formatRupee(item.closing)}</strong>
+                </span>
                 <span className="text-primary font-semibold">
                   {isSelected ? 'Currently Filtering' : 'Click to select'}
                 </span>

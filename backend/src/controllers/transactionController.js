@@ -173,6 +173,8 @@ async function getLiveOutflows(req, res) {
     if (!db) return res.json({ outflows: [], totalAmount: 0, count: 0 });
 
     const matchConditions = [
+      { 'services.payments.paymentFrom': 'Company' },
+      { 'services.payments.paymentTo': { $in: ['Supplier', 'Traveller', 'Traveler'] } },
       {
         $or: [
           { 'services.payments.status': { $in: ['VERIFIED', 'PAID'] } },
@@ -255,6 +257,7 @@ async function getLiveOutflows(req, res) {
             }
           },
           paymentId: '$services.payments.paymentId',
+          paymentTo: '$services.payments.paymentTo',
           attachment: '$services.payments.attachment',
           attachmentName: '$services.payments.attachmentName',
           status: '$services.payments.status',
@@ -298,6 +301,7 @@ async function getLiveOutflows(req, res) {
         amount,
         paymentMode: s.paymentMode,
         paymentId: s.paymentId || (s._id ? String(s._id).slice(-8) : '—'),
+        paymentTo: s.paymentTo,
         attachment: s.attachment || '',
         details: s.details,
         addedByName: s.addedByName
@@ -321,8 +325,11 @@ async function addTransaction(req, res) {
     if (!type || !['INFLOW', 'OUTFLOW'].includes(type)) {
       return res.status(400).json({ error: 'type must be INFLOW or OUTFLOW' });
     }
-    if (!category || !VALID_CATEGORIES.includes(category)) {
-      return res.status(400).json({ error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` });
+    const validCategoriesForType = type === 'OUTFLOW'
+      ? ['STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST']
+      : VALID_CATEGORIES;
+    if (!category || !validCategoriesForType.includes(category)) {
+      return res.status(400).json({ error: `category must be one of: ${validCategoriesForType.join(', ')}` });
     }
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -332,18 +339,17 @@ async function addTransaction(req, res) {
       return res.status(400).json({ error: `paymentMode must be one of the 6 accounts: ${VALID_PAYMENT_MODES.join(', ')}` });
     }
 
-    const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[type];
-    const defaultFlow = type === 'INFLOW' ? 'TRAVELLER_TO_COMPANY' : 'COMPANY_TO_SUPPLIER';
-    const resolvedFlowDirection = flowDirection === undefined ? defaultFlow : flowDirection;
-
-    if (!allowedFlowDirections.includes(resolvedFlowDirection)) {
-      return res.status(400).json({ error: `flowDirection must be one of: ${allowedFlowDirections.join(', ')}` });
+    const resolvedFlowDirection = type === 'INFLOW'
+      ? (flowDirection === undefined ? 'TRAVELLER_TO_COMPANY' : flowDirection)
+      : undefined;
+    if (type === 'INFLOW' && !FLOW_DIRECTIONS_BY_TYPE.INFLOW.includes(resolvedFlowDirection)) {
+      return res.status(400).json({ error: `flowDirection must be one of: ${FLOW_DIRECTIONS_BY_TYPE.INFLOW.join(', ')}` });
     }
 
     const txn = new Transaction({
       type,
       category,
-      flowDirection: resolvedFlowDirection,
+      ...(resolvedFlowDirection ? { flowDirection: resolvedFlowDirection } : {}),
       amount: parsedAmount,
       description: description || '',
       paymentMode: paymentMode || 'Kalpana BOI',
@@ -384,13 +390,22 @@ async function editTransaction(req, res) {
     const effectiveType = type === undefined ? existingTransaction.type : type;
     const effectiveFlowDirection = flowDirection === undefined ? existingTransaction.flowDirection : flowDirection;
     const allowedFlowDirections = FLOW_DIRECTIONS_BY_TYPE[effectiveType];
-    if (!allowedFlowDirections || !allowedFlowDirections.includes(effectiveFlowDirection)) {
+    if (!allowedFlowDirections || (effectiveType === 'INFLOW' && !allowedFlowDirections.includes(effectiveFlowDirection)) ||
+        (effectiveType === 'OUTFLOW' && effectiveFlowDirection && !allowedFlowDirections.includes(effectiveFlowDirection))) {
       return res.status(400).json({ error: 'flowDirection must be compatible with type' });
     }
 
     const update = {};
     if (type) update.type = type;
-    if (category) update.category = category;
+    if (category) {
+      const validCategoriesForType = effectiveType === 'OUTFLOW'
+        ? ['STAFF_SALARIES', 'MARKETING', 'OTHERS', 'GST']
+        : VALID_CATEGORIES;
+      if (!validCategoriesForType.includes(category)) {
+        return res.status(400).json({ error: `category must be one of: ${validCategoriesForType.join(', ')}` });
+      }
+      update.category = category;
+    }
     if (flowDirection) update.flowDirection = flowDirection;
     if (amount !== undefined) update.amount = parseFloat(amount);
     if (description !== undefined) update.description = description;
@@ -451,6 +466,8 @@ async function getBookingMargins(req, res) {
     }
 
     const {
+      month,
+      year,
       bookingId,
       status,
       createdBy,
@@ -509,6 +526,15 @@ async function getBookingMargins(req, res) {
           to.setHours(23, 59, 59, 999);
           match.createdAt.$lte = to;
         }
+      } else if (month || year) {
+        const m = Number(month);
+        const y = Number(year);
+        if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(y) || y < 2000 || y > 9999) {
+          return res.status(400).json({ error: 'Invalid month or year' });
+        }
+        const startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+        const endDate = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+        match.createdAt = { $gte: startDate, $lte: endDate };
       }
     }
 
@@ -578,7 +604,16 @@ async function getBookingMargins(req, res) {
                 totalDueAmount: { $sum: { $toDouble: { $ifNull: ['$dueAmount', 0] } } },
                 totalProfitMargin: { $sum: { $toDouble: { $ifNull: ['$profitMargin', 0] } } },
                 totalGstAmount: { $sum: { $toDouble: { $ifNull: ['$gstAmount', 0] } } },
-                totalCount: { $sum: 1 }
+                totalCount: { $sum: 1 },
+                profitableCount: {
+                  $sum: { $cond: [{ $gt: [{ $toDouble: { $ifNull: ['$profitMargin', 0] } }, 0] }, 1, 0] }
+                },
+                lossCount: {
+                  $sum: { $cond: [{ $lt: [{ $toDouble: { $ifNull: ['$profitMargin', 0] } }, 0] }, 1, 0] }
+                },
+                breakEvenCount: {
+                  $sum: { $cond: [{ $eq: [{ $toDouble: { $ifNull: ['$profitMargin', 0] } }, 0] }, 1, 0] }
+                }
               }
             }
           ],
@@ -626,6 +661,10 @@ async function getBookingMargins(req, res) {
     const totalProfitMargin = Math.round(rawSummary.totalProfitMargin || 0);
     const totalGstAmount = Math.round(rawSummary.totalGstAmount || 0);
     const totalCount = rawSummary.totalCount || 0;
+    const profitableCount = rawSummary.profitableCount || 0;
+    const lossCount = rawSummary.lossCount || 0;
+    const breakEvenCount = rawSummary.breakEvenCount || 0;
+    const totalSupplierCost = Math.max(0, totalPackageCost - totalProfitMargin);
     const overallMarginPercent =
       totalPackageCost > 0
         ? +((totalProfitMargin / totalPackageCost) * 100).toFixed(2)
@@ -644,12 +683,16 @@ async function getBookingMargins(req, res) {
     res.json({
       summary: {
         totalPackageCost,
+        totalSupplierCost,
         totalPaidAmount,
         totalDueAmount,
         totalProfitMargin,
         totalGstAmount,
         overallMarginPercent,
-        totalCount
+        totalCount,
+        profitableCount,
+        lossCount,
+        breakEvenCount
       },
       bookings,
       pagination: {
